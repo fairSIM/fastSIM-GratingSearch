@@ -17,6 +17,8 @@ along with the code.  If not, see <http://www.gnu.org/licenses/>
 
 package de.bio_photonics.gratingsearch;
 
+import org.fairsim.linalg.Vec2d;
+
 /** Structure hold all parameters of a grating. 
 The original MATLAB code can be found here, please cite their
 publication if you use this software to create SIM gratings:
@@ -90,6 +92,22 @@ class Grating {
 	    ax,ay,bx,by, gratPer, gratDir*180/Math.PI, 
 	    (shiftDir==0)?("h"):("v"));
     }
+
+    /** Write the (binary, -1, 1) pattern to a vector */
+    public void writeToVector(Vec2d.Real vec) {
+    
+	double kx = (2*Math.PI / gratPer) * Math.sin(gratDir );
+	double ky = (2*Math.PI / gratPer) * Math.cos(gratDir );
+
+	for (int y=0; y<vec.vectorHeight(); y++)
+	for (int x=0; x<vec.vectorWidth(); x++) {
+	    double val = Math.sin( Math.PI/2 + x*kx + y*ky + 1e-4);
+	    
+	    vec.set(x,y, (val>0)?(1):(-1));
+	}
+
+    }
+
 
     /** Helper: greatest common denominator for int */
     static int gcd(int a, int b) { return b==0 ? a : gcd(b, a%b); }

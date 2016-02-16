@@ -20,13 +20,16 @@ package de.bio_photonics.gratingsearch;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.fairsim.fiji.ImageVector;
+import org.fairsim.linalg.Vec2d;
+
 /** Java port of fastSIM SLM grating search algorithm.
 The original MATLAB code can be found here, please cite their
 publication if you use this software to create SIM gratings:
 
 https://github.com/nanoimaging/fastSIM_GratingSearchforSLM
 */
-public class Grating_Search {
+public class Grating_Search implements ij.plugin.PlugIn {
 
     // search value space
     final int axmax = 28, aymax = 28;
@@ -176,25 +179,18 @@ public class Grating_Search {
 
 
 
-
-
-
-
-
-    
-    /** main method */
-    public static void main( String [] args ) {
-
-	Grating_Search gs  = new Grating_Search();
+    /** ImageJ plugin run method */
+    @Override
+    public void run(String arg) {
 
 	// calculate gratings 3.2 .. 3.8 pxl size,
 	// allowing for 3 equi-distant phase shifts
 	System.out.println("-- Compute all candidates --");
-	List<Grating> all = gs.calcGrat(3.2,3.8, 3 );
+	List<Grating> all = calcGrat(3.2,3.8, 3 );
 
 	// collect pairs of 3 directions
 	System.out.println("-- Compute direction combinations --");
-	List<Grating []> dirs = gs.selectDirs(all, 3, 0.04);
+	List<Grating []> dirs = selectDirs(all, 3, 0.04);
 
 	for ( Grating [] i : dirs ) {
 	    System.out.println("---");
@@ -202,12 +198,32 @@ public class Grating_Search {
 		System.out.println( j.toString());
 	}
 
+	for (int i=0; i<3; i++) {
+	ImageVector testPttr = ImageVector.create(512,512);
+	dirs.get(0)[i].writeToVector( testPttr );
+	
+	ij.ImagePlus ip = new ij.ImagePlus("Pattern", testPttr.img());
+	ip.show();
+	
+	Vec2d.Cplx fft = Vec2d.createCplx( testPttr );
+	fft.copy( testPttr );
+	fft.fft2d(false);
+	ImageVector fftPttr = ImageVector.create(512,512);
+
+	org.fairsim.linalg.Transforms.computePowerSpectrum( fft, fftPttr);
+	
+	ij.ImagePlus ip2 = new ij.ImagePlus("Pattern", fftPttr.img());
+	ip2.show();
+	}
 	
     }
 
-
-
-
+    
+    /** main method */
+    public static void main( String [] args ) {
+	Grating_Search gs  = new Grating_Search();
+	gs.run("");
+    }
 
 
 }

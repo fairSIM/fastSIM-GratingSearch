@@ -2,7 +2,7 @@
 .PHONY: all clean
 
 # Options for the java compiler
-JFLAGS = -g -d ./ -Xlint:unchecked -extdirs "./external"
+JFLAGS = -g -Xlint:unchecked -extdirs "./external"
 JC = javac6
 JAR = jar
 
@@ -16,8 +16,8 @@ RM = rm -rf
 
 
 # just build the project
-all:	$(wildcard *.java)
-	$(JC) $(JFLAGS) $(wildcard *.java)
+all:	$(wildcard de/bio_photonics/*/*.java)
+	$(JC) $(JFLAGS) $(wildcard de/bio_photonics/*/*.java)
 
 
 # create a jar-file
@@ -27,4 +27,4 @@ jar: all
 
 
 clean :
-	$(RM) ./de SLM_GratingSearch_*.jar
+	$(RM) ./de/*/*/*.class SLM_GratingSearch_*.jar
