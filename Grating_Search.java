@@ -33,10 +33,23 @@ public class Grating_Search {
     final int bxmin = 2,  bymin = 2;
     final int bxmax = 28, bymax = 28;
 
-    // Tolerance when looking for equal direction, in rad
-    final static double tolDir = 1e-5;
+    // fourier space pxl
+    final int fsPxl = 512;
+
+    // SLM #pxl
+    int slmPxlX = 1280, slmPxlY = 1024;
     
-    // 1 - loop creating possible gratings
+    
+    /** Calculated possible gratings by iterating parameter space.
+     *  Each parameter set and resulting grating is tested to meet
+     *  conditions: (a) grating period within given limits, (b)
+     *  grating is shiftable by a given number of equi-distant phase steps.
+     *  
+     *  @param gratPerMin Minimal grating period, in #pixels
+     *  @param gratPerMax Maximal grating period, in #pixels
+     *  @param phaseSteps Number of phase steps
+     *  @return List of gratings satisfying the conditions
+     *  */
     public List<Grating> calcGrat(
 	final double gratPerMin, 
 	final double gratPerMax,
@@ -87,18 +100,30 @@ public class Grating_Search {
 
     /** Add a grating only if no grating with similar direction
      *  is already present */
-    private static boolean fuzzyAdd( 
-	Grating a , List<Grating> candidates ) {
+    private static boolean fuzzyAdd( Grating a , List<Grating> candidates ) {
+	
+	// Tolerance when looking for equal direction, in rad
+	final double tolDir = 1e-5;
+	
 	for ( Grating b : candidates )
 	    if ( Math.abs( b.gratDir  - a.gratDir ) < tolDir )
 		return false;
+	
 	candidates.add( a );
 	return true;
     }
 
 
-    
-    // 2 - select matching combinations of directions
+    /** Select combinations of grating orientations.
+     *  From a list of possible gratings, generate subsets
+     *  with equidistant angles, i.e. for n directions, angle
+     *  between gratings is approx. pi/n.
+     *
+     *  @param candidates   List of grating candidates
+     *  @param nrDirs	    Number of directions (typ. 3, 5, ...)
+     *  @param tolDirection Allowed deviation from ideal angle, in rad
+     *	@return List of matching grating combinations
+     *	*/
     public List<Grating []> selectDirs( 
 	List<Grating> candidates, 
 	final int nrDirs, final double tolDirection ) {
@@ -141,6 +166,14 @@ public class Grating_Search {
 
 	return ret;
     }
+
+
+    // TODO: Implement the fourier plane unwanted orders checks here
+    public void fourierCheck( List<Grating []> candidates ) {
+
+    }
+
+
 
 
 
