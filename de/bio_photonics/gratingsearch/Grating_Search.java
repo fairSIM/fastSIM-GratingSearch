@@ -189,13 +189,13 @@ public class Grating_Search implements ij.plugin.PlugIn {
      *	@param illum	    Illumination vector to apply
      *	@param maxUnwanted  Maximum ratio of amplitude passing through mask
      *	@param maskSize	    Size of mask, in pixel
-     *	@param	onlyOk	    Add only gratings that are o.k. to the output
+     *	@param	outputAlsoFailed Add also the gratings that failed unwanted order testing
      *	@param	spatial	    Receives spatial images of illuminated SLM, may be null
      *	@param  fourier	    Receives Fourier images of illuminated SLM, may be null
      *	@param name	    String to add to the displayed image caption
      * */
     public boolean fourierCheck( Grating [] candidates, Vec2d.Real illum, 
-	double maxUnwated, int maskSize, boolean onlyOk,
+	double maxUnwated, int maskSize, boolean outputAlsoFailed,
 	ImageDisplay spatial, ImageDisplay fourier, String name ) {
 
 	Vec2d.Cplx     sumFreq = Vec2d.createCplx( fsPxl, fsPxl );
@@ -238,7 +238,7 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	}
 
 	// store spectrum (if display is set != null)
-	if ( (fourier!=null) && ((!onlyOk) || ok)) {
+	if ( (fourier!=null) && (outputAlsoFailed || ok)) {
 	    
 	    // markers for positions
 	    ImageDisplay.Marker [] maskRings = new ImageDisplay.Marker[candidates.length*4];
@@ -258,12 +258,12 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	}
 
 	// store pattern (if display is set != null)
-	if ( (spatial != null) && ((!onlyOk) || ok)) {
+	if ( (spatial != null) && (outputAlsoFailed || ok)) {
 	    for (int i=0; i<candidates.length; i++) {
 		Vec2d.Real img = Vec2d.createReal( fsPxl, fsPxl );
 		candidates[i].writeToVector(img);
 		img.times(illum);
-		spatial.addImage( img, name+" ang: "+i );
+		spatial.addImage( img, name+" ang: "+i+" "+candidates[i] );
 	    }
 	}
 	
@@ -341,20 +341,32 @@ public class Grating_Search implements ij.plugin.PlugIn {
 
 
    
-    
-    public void calculate(double gratMin, double gratMax, int phases, int nr_dir, double max_angle) {
+    /** Run the full calculation.
+     *  @param gratMin	minial  grating period, in #pxl
+     *  @param gratMax	maximal grating period, in #pxl
+     *  @param phases	Number of phases
+     *  @param nr_dir	Number of pattern orientations
+     *  @param max_angle Maximal deviation from ideal (pi/n) angle distribution of pattern direction, in rad
+     *  @param mask_size Size of holes in mask, in #pxl
+     *  @param max_unwanted Maximal contribution of unwanted orders
+     *  @param output_failed If to output also failed pattern
+     *  */
+    public void calculate(double gratMin, double gratMax, 
+	int phases, int nr_dir, double max_angle, int mask_size, 
+	double max_unwanted, boolean output_failed) {
 
 	SimpleMT.useParallel(true);
 
 	// calculate gratings 3.2 .. 3.8 pxl size,
 	// allowing for 3 equi-distant phase shifts
-	Tool.tell("-- Compute all candidates --");
+	Tool.trace("-- Compute all candidates --");
 	List<Grating> all = calcGrat(gratMin, gratMax, phases );
+	Tool.trace(" Number matching grating constant and phases: "+all.size());
 
 	// collect pairs of 3 directions
-	Tool.tell("-- Compute direction combinations --");
+	Tool.trace("-- Compute direction combinations --");
 	List<Grating []> dirs = selectDirs(all, nr_dir, max_angle);
-	Tool.tell(" Number of possible combinations: "+dirs.size());
+	Tool.trace("   remaining number of possible combinations: "+dirs.size());
 
 	/*
 	for ( Grating [] i : dirs ) {
@@ -364,19 +376,27 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	} */
 
 	// check if unwanted orders can be blocked by masking
+	Tool.trace("-- Compute wanted vs. unwanted orders --");
 	DisplayWrapper imgSpatial = new DisplayWrapper(fsPxl, fsPxl, "Spatial");
 	DisplayWrapper imgFourier = new DisplayWrapper(fsPxl, fsPxl, "Fourier");
 	
 	Vec2d.Real gaussProfile = createGaussIllum( fsPxl/2.2, fsPxl);
-	
-	for (int i=0; i<Math.min( dirs.size(), 400); i++) {
-	    if (i%10==0) Tool.tell(" FFT "+i+"/"+Math.min(dirs.size(),400));
-	    fourierCheck( dirs.get(i), gaussProfile, 0.03, 20, true, imgSpatial, imgFourier, "i:"+i); 
+	int countOk=0, maxCheck = Math.min( dirs.size(), 400);
+
+	for (int i=0; i< maxCheck ; i++) {
+	    
+	    if (i%10==0) Tool.tell(" FFT "+i+"/"+maxCheck);
+	    
+	    boolean ok = fourierCheck( dirs.get(i), gaussProfile, max_unwanted, mask_size, 
+		output_failed, imgSpatial, imgFourier, "i:"+i); 
+	    
+	    if (ok) countOk++;
 	}
 	
 	imgSpatial.display();
 	imgFourier.display();
-	
+	Tool.trace("    Number of pattern after modulation check: "+ countOk);
+
     }
 
     // ---- Start methods ----
@@ -384,19 +404,62 @@ public class Grating_Search implements ij.plugin.PlugIn {
     /** ImageJ plugin run method */
     @Override
     public void run(String arg) {
+	
+	// redirect log output to FIJIs log
+	Tool.setLogger( new Tool.Logger () {
+	    @Override
+	    public void writeTrace(String w) {
+		    ij.IJ.log(w);
+	    }
+	    @Override
+	    public void writeShortMessage(String w) {
+	        ij.IJ.showStatus(w);
+	    }
 
+	});
+
+	// generate simple GUI
 	GenericDialog gd = new GenericDialog("SLM pattern search");
 
 	gd.addMessage("Grating parameters");
-	gd.addNumericField("grating_min_period", 3.0, 3);
-	gd.addNumericField("grating_max_period", 3.2, 3);
+	gd.addNumericField("grating_min_period", 2.81, 2);
+	gd.addNumericField("grating_max_period", 2.85, 2);
 	gd.addNumericField("#phases", 3, 0);
-	gd.addMessage("Search parameter");
-	gd.addNumericField("max_angle(deg)", 3, 0);
-
+	gd.addMessage("Pattern direction");
+	gd.addNumericField("#pattern_directions", 3, 0);
+	gd.addNumericField("max_deviation_ideal_angle(deg)", 1.5, 1);
+	gd.addMessage("Modulation");
+	gd.addNumericField("max_unwanted_modulation",0.015,3);
+	gd.addNumericField("mask_size(pxl)", 25, 0);
+	gd.addCheckbox("Output_also_failed", false);
+    
 	gd.showDialog();
 	if (gd.wasCanceled())
 	    return;
+
+	// get parameters
+	double gratMin     = gd.getNextNumber();
+	double gratMax     = gd.getNextNumber();
+	int nrPhases  = (int)gd.getNextNumber();
+	int nrDirs    = (int)gd.getNextNumber();
+	double maxAngleDev = gd.getNextNumber();
+	double maxUnwMod   = gd.getNextNumber();
+	int maskSize  = (int)gd.getNextNumber();
+	boolean outputFailed=gd.getNextBoolean();
+	
+	// run the actual calculation
+	calculate( gratMin, gratMax, nrPhases, nrDirs, maxAngleDev, maskSize,
+	    maxUnwMod, outputFailed);
+
+	// output parameters at end of log
+	Tool.tell(String.format("# Parameters: gMin %5.3f gMax %5.3f "+
+	    " #Phases %1d  #Orientations %1d", gratMin, gratMax,
+	    nrPhases, nrDirs));
+	Tool.tell(String.format("# Search param: max angle deviation (deg): %6.0f",
+	    maxAngleDev));
+	Tool.tell(String.format("# Search param:   max unwanted modulation: %6.4f",
+	    maxUnwMod));
+	Tool.tell("# Search param: Mask size: "+maskSize);
 
     }
     
@@ -405,15 +468,28 @@ public class Grating_Search implements ij.plugin.PlugIn {
     /** main method */
     public static void main( String [] args ) {
 
-	if (args.length!=1) {
-	    System.out.println("Usage: gratPerMin gratPerMax #phases");
+	if (args.length!=1 && args.length!=4) {
+	    System.out.println("Usage: gratPerMin gratPerMax #phases "+
+		"#orientation");
 	    System.out.println("or: GUI");
+	    return;
 	}
-
-
+	
 	Grating_Search gs  = new Grating_Search();
 	new ij.ImageJ( ij.ImageJ.EMBEDDED);
-	gs.calculate(3.0, 3.2, 3, 3, 0.05/180*Math.PI);
+	
+	if (args.length==1) {
+	    gs.run("");
+	    return;
+	}
+
+	double gratMin = Double.parseDouble( args[0] );
+	double gratMax = Double.parseDouble( args[1] );
+	int nrPhases   = Integer.parseInt( args[2] );
+	int nrDirs     = Integer.parseInt( args[3] );
+
+	gs.calculate(gratMin, gratMax, nrPhases, 
+	    nrDirs, 3./180*Math.PI, 20, 0.02, false);
     }
 
 

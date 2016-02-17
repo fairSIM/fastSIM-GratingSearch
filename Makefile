@@ -22,8 +22,8 @@ all:	$(wildcard de/bio_photonics/*/*.java)
 
 # create a jar-file
 jar: all
-	$(JAR) -cvf SLM_GratingSearch_$(shell date +%Y%m%d-%H%M).jar \
-	de/*/*/*.class
+	$(JAR) -cvfm SLM_GratingSearch_$(shell date +%Y%m%d-%H%M).jar \
+	Manifest.txt plugins.config de/*/*/*.class
 
 
 clean :
