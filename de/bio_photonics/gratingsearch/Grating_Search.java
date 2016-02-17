@@ -22,6 +22,12 @@ import java.util.List;
 
 import org.fairsim.fiji.ImageVector;
 import org.fairsim.linalg.Vec2d;
+import org.fairsim.linalg.Transforms;
+import org.fairsim.sim_algorithm.SimUtils;
+
+
+import ij.ImagePlus;
+import ij.ImageStack;
 
 /** Java port of fastSIM SLM grating search algorithm.
 The original MATLAB code can be found here, please cite their
@@ -186,11 +192,11 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	// calculate gratings 3.2 .. 3.8 pxl size,
 	// allowing for 3 equi-distant phase shifts
 	System.out.println("-- Compute all candidates --");
-	List<Grating> all = calcGrat(3.2,3.8, 3 );
+	List<Grating> all = calcGrat(3.2,3.4, 3 );
 
 	// collect pairs of 3 directions
 	System.out.println("-- Compute direction combinations --");
-	List<Grating []> dirs = selectDirs(all, 3, 0.04);
+	List<Grating []> dirs = selectDirs(all, 3, 5*Math.PI/180.);
 
 	for ( Grating [] i : dirs ) {
 	    System.out.println("---");
@@ -198,30 +204,65 @@ public class Grating_Search implements ij.plugin.PlugIn {
 		System.out.println( j.toString());
 	}
 
-	for (int i=0; i<3; i++) {
-	ImageVector testPttr = ImageVector.create(512,512);
-	dirs.get(0)[i].writeToVector( testPttr );
-	
-	ij.ImagePlus ip = new ij.ImagePlus("Pattern", testPttr.img());
-	ip.show();
-	
-	Vec2d.Cplx fft = Vec2d.createCplx( testPttr );
-	fft.copy( testPttr );
-	fft.fft2d(false);
-	ImageVector fftPttr = ImageVector.create(512,512);
+	ImageStack isPttr = new ImageStack(512,512);
+	ImageStack isFfts = new ImageStack(512,512);
 
-	org.fairsim.linalg.Transforms.computePowerSpectrum( fft, fftPttr);
+
+	for (int i=0; i<3; i++) {
+	    
+	    ImageVector testPttr = ImageVector.create(512,512);
+	    dirs.get(0)[i].writeToVector( testPttr );
 	
-	ij.ImagePlus ip2 = new ij.ImagePlus("Pattern", fftPttr.img());
-	ip2.show();
+	    isPttr.addSlice("i:"+i, testPttr.img());
+	
+	    multGauss( testPttr, 210);
+	    SimUtils.fadeBorderCos(testPttr, 10);
+
+	    Vec2d.Cplx fft = Vec2d.createCplx( testPttr );
+	    fft.copy( testPttr );
+	    fft.fft2d(false);
+	
+	    ImageVector fftPttr = ImageVector.create(512,512);
+	    fftPttr.copyMagnitude( fft );
+	    Transforms.swapQuadrant( fftPttr );
+	    fftPttr.normalize();
+
+
+	    isFfts.addSlice("fft i:"+i, fftPttr.img());
+	
 	}
 	
+	
+	ij.ImagePlus ip = new ij.ImagePlus("Pattern", isPttr);
+	ij.ImagePlus ip2 = new ij.ImagePlus("Pattern FFTs", isFfts);
+	ip.show();
+	ip2.show();
+	
+    }
+
+
+    /** Multiply a Gaussian illumination profile */
+    public void multGauss( Vec2d.Real vec, double fwhm) {
+
+	final double sigma = fwhm/2.355;
+	final int w = vec.vectorWidth();
+	final int h = vec.vectorHeight();
+	
+	for (int y=0; y<h; y++)
+	for (int x=0; x<w; x++) {
+
+	    double  val = vec.get(x,y);
+	    double dist = Math.hypot( y-h/2. , x-w/2. );
+	    double fac = Math.exp( -(dist*dist) / (2 * sigma*sigma));
+	    vec.set(x,y, (float)(val*fac));
+	}
     }
 
     
     /** main method */
     public static void main( String [] args ) {
 	Grating_Search gs  = new Grating_Search();
+	new ij.ImageJ( ij.ImageJ.EMBEDDED);
 	gs.run("");
     }
 
