@@ -35,6 +35,7 @@ import org.fairsim.utils.SimpleMT;
 
 import ij.ImagePlus;
 import ij.ImageStack;
+import ij.gui.GenericDialog;
 
 /** Java port of fastSIM SLM grating search algorithm.
 The original MATLAB code can be found here, please cite their
@@ -339,20 +340,20 @@ public class Grating_Search implements ij.plugin.PlugIn {
 
 
 
-    /** ImageJ plugin run method */
-    @Override
-    public void run(String arg) {
+   
+    
+    public void calculate(double gratMin, double gratMax, int phases, int nr_dir, double max_angle) {
 
 	SimpleMT.useParallel(true);
 
 	// calculate gratings 3.2 .. 3.8 pxl size,
 	// allowing for 3 equi-distant phase shifts
 	Tool.tell("-- Compute all candidates --");
-	List<Grating> all = calcGrat(3.2,3.4, 3 );
+	List<Grating> all = calcGrat(gratMin, gratMax, phases );
 
 	// collect pairs of 3 directions
 	Tool.tell("-- Compute direction combinations --");
-	List<Grating []> dirs = selectDirs(all, 3, 5*Math.PI/180.);
+	List<Grating []> dirs = selectDirs(all, nr_dir, max_angle);
 	Tool.tell(" Number of possible combinations: "+dirs.size());
 
 	/*
@@ -372,65 +373,47 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	    if (i%10==0) Tool.tell(" FFT "+i+"/"+Math.min(dirs.size(),400));
 	    fourierCheck( dirs.get(i), gaussProfile, 0.03, 20, true, imgSpatial, imgFourier, "i:"+i); 
 	}
-
-
-
-	/*
 	
-	Vec2d.Real sum = Vec2d.createReal( fsPxl, fsPxl );
-	ImageDisplay.Marker [] maskRings = new ImageDisplay.Marker[6];
-	
-	for (int i=0; i<3; i++) {
-	    
-	    Vec2d.Real testPttr = Vec2d.createReal(512,512);
-	    dirs.get(0)[i].writeToVector( testPttr );
-	
-	    imgSpatial.addImage(testPttr, "i: "+i);
-
-
-	    Vec2d.Cplx fft = Vec2d.createCplx( testPttr );
-	    fft.copy( testPttr );
-	    multGauss( fft, 210);
-	    //convSLMstructure( fft );
-	    fft.fft2d(false);
-		
-	    fft.scal(1.f/(fsPxl*fsPxl));
-
-	    ImageVector fftPttr = ImageVector.create(512,512);
-	    fftPttr.copyMagnitude( fft );
-
-	    Transforms.swapQuadrant( fftPttr );
-	    sum.add(fftPttr );
-	    
-	    // compute the mask position
-	    double [] mPos =  dirs.get(0)[i].peakPos(512);
-	    ImageDisplay.Marker mp1 = new ImageDisplay.Marker( 
-		256+mPos[0], 256+mPos[1], 10, 10, true);
-	    ImageDisplay.Marker mm1 = new ImageDisplay.Marker( 
-		256-mPos[0], 256-mPos[1], 10, 10, true);
-
-	    maskRings[2*i] =  mp1;
-	    maskRings[2*i+1] =  mm1;
-
-	    imgFourier.addImage(fftPttr, "i: "+i, mp1, mm1);
-
-	}
-	
-	imgFourier.addImage( sum, "Sum", maskRings );
-	*/
-
 	imgSpatial.display();
 	imgFourier.display();
 	
     }
 
+    // ---- Start methods ----
+
+    /** ImageJ plugin run method */
+    @Override
+    public void run(String arg) {
+
+	GenericDialog gd = new GenericDialog("SLM pattern search");
+
+	gd.addMessage("Grating parameters");
+	gd.addNumericField("grating_min_period", 3.0, 3);
+	gd.addNumericField("grating_max_period", 3.2, 3);
+	gd.addNumericField("#phases", 3, 0);
+	gd.addMessage("Search parameter");
+	gd.addNumericField("max_angle(deg)", 3, 0);
+
+	gd.showDialog();
+	if (gd.wasCanceled())
+	    return;
+
+    }
+    
 
     
     /** main method */
     public static void main( String [] args ) {
+
+	if (args.length!=1) {
+	    System.out.println("Usage: gratPerMin gratPerMax #phases");
+	    System.out.println("or: GUI");
+	}
+
+
 	Grating_Search gs  = new Grating_Search();
 	new ij.ImageJ( ij.ImageJ.EMBEDDED);
-	gs.run("");
+	gs.calculate(3.0, 3.2, 3, 3, 0.05/180*Math.PI);
     }
 
 
