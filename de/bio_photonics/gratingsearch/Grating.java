@@ -97,16 +97,19 @@ class Grating {
     }
 
     /** Write the (binary, -1, 1) pattern to a vector */
-    public void writeToVector(Vec2d.Real vec) {
-    
-	double kx = (2*Math.PI / gratPer) * Math.sin(gratDir );
-	double ky = (2*Math.PI / gratPer) * Math.cos(gratDir );
+    public void writeToVector(final Vec2d.Real vec) {
+	final double kx = (2*Math.PI / gratPer) * Math.sin(gratDir );
+	final double ky = (2*Math.PI / gratPer) * Math.cos(gratDir );
 
-	for (int y=0; y<vec.vectorHeight(); y++)
-	for (int x=0; x<vec.vectorWidth(); x++) {
-	    double val = Math.sin( Math.PI/2 + x*kx + y*ky + 1e-4);
-	    vec.set(x,y, (val>0)?(1):(-1));
-	}
+	new SimpleMT.PFor(0, vec.vectorHeight()) {
+	    public void at(int y) {
+		for (int x=0; x<vec.vectorWidth(); x++) {
+		    double val = MTool.fsin( Math.PI/2 + x*kx + y*ky + 1e-4);
+		    vec.set(x,y,  (val>0)?(1):(-1));
+		}
+	    };
+	};
+    
     }
 
     /** Write the (binary, -1, 1) pattern to a vector */

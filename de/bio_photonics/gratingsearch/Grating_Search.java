@@ -31,6 +31,8 @@ import org.fairsim.fiji.DisplayWrapper;
 import org.fairsim.utils.ImageDisplay;
 import org.fairsim.utils.Tool; 
 
+import org.fairsim.utils.SimpleMT;
+
 import ij.ImagePlus;
 import ij.ImageStack;
 
@@ -74,7 +76,7 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	
 	// outer loop set: loop grating sizes
 	for (int ax = 0; ax < axmax; ax ++ ) {
-	    System.out.println(String.format(
+	    Tool.tell(String.format(
 		"DONE: %d / %d, #candidates %d",ax,axmax, 
 		    candidates.size()));
 	    for( int ay = -aymax; ay < aymax; ay++ ) {
@@ -186,63 +188,99 @@ public class Grating_Search implements ij.plugin.PlugIn {
      *	@param illum	    Illumination vector to apply
      *	@param maxUnwanted  Maximum ratio of amplitude passing through mask
      *	@param maskSize	    Size of mask, in pixel
+     *	@param	onlyOk	    Add only gratings that are o.k. to the output
      *	@param	spatial	    Receives spatial images of illuminated SLM, may be null
      *	@param  fourier	    Receives Fourier images of illuminated SLM, may be null
+     *	@param name	    String to add to the displayed image caption
      * */
     public boolean fourierCheck( Grating [] candidates, Vec2d.Real illum, 
-	double maxUnwated, int maskSize,
-	ImageDisplay spatial, ImageDisplay fourier ) {
+	double maxUnwated, int maskSize, boolean onlyOk,
+	ImageDisplay spatial, ImageDisplay fourier, String name ) {
 
 	Vec2d.Cplx     sumFreq = Vec2d.createCplx( fsPxl, fsPxl );
 	Vec2d.Cplx [] gratFreq = Vec2d.createArrayCplx( candidates.length, fsPxl, fsPxl );
 
-	Tool.Timer t1 = Tool.getTimer();
-	Tool.Timer t2 = Tool.getTimer();
-	Tool.Timer t3 = Tool.getTimer();
-	Tool.Timer t4 = Tool.getTimer();
-	Tool.Timer t5 = Tool.getTimer();
-
 	// Compute the gratings Fourier space and sum them up
 	for ( int i=0; i<candidates.length; i++ ) {
-	    t1.start();
 	    candidates[i].writeToVector( gratFreq[i] );	// get grating as vector 
-	    t1.stop();
-
-	    t2.start();
-	    gratFreq[i].times( illum );
-	    t2.stop();
-
-	    t3.start();
-	    gratFreq[i].fft2d(false);			// transform
-	    t3.stop();
-
-	    t4.start();
+	    gratFreq[i].times( illum );			// apply illumination vector
+	    Transforms.fft2d( gratFreq[i], false);	// transform
 	    Transforms.swapQuadrant(gratFreq[i]);	// quadrant-swap FFT result 
 	    sumFreq.add( gratFreq[i] );			// add to full vector
-	    t4.stop();
+	}
 
+	// Compute wanted and unwanted contributions
+	double []   wanted = new double[ candidates.length ];
+	double [] unwanted = new double[ candidates.length ];
+	boolean ok = true;
+	String magResult = "";
+
+	for ( int i=0; i<candidates.length; i++ ) {
+	    
+	    double [] mPos = candidates[i].peakPos(fsPxl);
+	    
+	    wanted[i] = 
+		sumRegion( gratFreq[i],(int)(fsPxl/2+mPos[0]),(int)(fsPxl/2+mPos[1]), 8)+
+		sumRegion( gratFreq[i],(int)(fsPxl/2-mPos[0]),(int)(fsPxl/2-mPos[1]), 8);
+
+	    for (int j=0; j<candidates.length; j++) {
+		if (i==j) continue;
+		unwanted[i] += 
+		   sumRegion( gratFreq[j],(int)(fsPxl/2+mPos[0]),(int)(fsPxl/2+mPos[1]), maskSize)+
+		   sumRegion( gratFreq[j],(int)(fsPxl/2-mPos[0]),(int)(fsPxl/2-mPos[1]), maskSize);
+	    }
+	
+	    //Tool.trace(String.format("%8.5f / %8.5f -> %8.5f", wanted[i], unwanted[i], 
+	    //unwanted[i]/wanted[i]));
+	    if ((unwanted[i]/wanted[i])>maxUnwated) ok=false;
+	    magResult+=String.format("%1d: %5.4f ",i,unwanted[i]/wanted[i]);
 	}
 
 	// store spectrum (if display is set != null)
-	t5.start();
-	if ( fourier!=null ) {
+	if ( (fourier!=null) && ((!onlyOk) || ok)) {
 	    
 	    // markers for positions
 	    ImageDisplay.Marker [] maskRings = new ImageDisplay.Marker[candidates.length*4];
 	    for ( int i=0; i<candidates.length; i++ ) {
 		double [] mPos = candidates[i].peakPos(fsPxl);
-		maskRings[i*4+0] = new ImageDisplay.Marker(256+mPos[0], 256+mPos[1], 10, 10, true);
-		maskRings[i*4+1] = new ImageDisplay.Marker(256-mPos[0], 256-mPos[1], 10, 10, true);
-		maskRings[i*4+2] = new ImageDisplay.Marker(256+mPos[0], 256+mPos[1], maskSize, maskSize, false);
-		maskRings[i*4+3] = new ImageDisplay.Marker(256-mPos[0], 256-mPos[1], maskSize, maskSize, false);
+		maskRings[i*4+0] = 
+		    new ImageDisplay.Marker(fsPxl/2+mPos[0],fsPxl/2+mPos[1], 8, 8, false);
+		maskRings[i*4+1] = 
+		    new ImageDisplay.Marker(fsPxl/2-mPos[0],fsPxl/2-mPos[1], 8, 8, false);
+		maskRings[i*4+2] = 
+		    new ImageDisplay.Marker(fsPxl/2+mPos[0],fsPxl/2+mPos[1], maskSize, maskSize, false);
+		maskRings[i*4+3] = 
+		    new ImageDisplay.Marker(fsPxl/2-mPos[0],fsPxl/2-mPos[1], maskSize, maskSize, false);
 	    }
-	    fourier.addImage(magnitude( sumFreq ), "Spectrum", maskRings);
+	    fourier.addImage(magnitude( sumFreq ), 
+		name+" "+magResult+((ok)?("ok"):("!!not OK")), maskRings);
 	}
-	t5.stop();
 
-	Tool.trace("Timing: "+t1+t2+t3+t4+t5);
-	return true;
+	// store pattern (if display is set != null)
+	if ( (spatial != null) && ((!onlyOk) || ok)) {
+	    for (int i=0; i<candidates.length; i++) {
+		Vec2d.Real img = Vec2d.createReal( fsPxl, fsPxl );
+		candidates[i].writeToVector(img);
+		img.times(illum);
+		spatial.addImage( img, name+" ang: "+i );
+	    }
+	}
+	
+	return ok;
+    }
 
+
+    /** sum up the magnitude within a sub-region (mask) of a vector */
+    double sumRegion( Vec2d.Cplx vec, int xp, int yp, int size ) {
+
+	double sum=0;
+
+	for (int y = Math.max(0, yp-size); y< Math.min( vec.vectorHeight()-1, yp+size); y++)
+	for (int x = Math.max(0, xp-size); x< Math.min(  vec.vectorWidth()-1, xp+size); x++) {
+	    sum += vec.get(x,y).abs();
+	}
+
+	return sum;
     }
 
 
@@ -265,7 +303,7 @@ public class Grating_Search implements ij.plugin.PlugIn {
     /** Convolve a Fourier spectrum with the residual SLM structure */
     public void convSLMstructure(Vec2d.Cplx spec) {
 
-	spec.fft2d(true);
+	Transforms.fft2d( spec, true);
 	Vec2d.Cplx residual = Vec2d.createCplx(spec);
 
 	final int w = spec.vectorWidth();
@@ -285,10 +323,10 @@ public class Grating_Search implements ij.plugin.PlugIn {
 
 	// TODO: check if this is what matlabs conv2 would do
 	Transforms.swapQuadrant( residual );
-	residual.fft2d(true);
+	Transforms.fft2d( residual, true);
 
 	spec.times(residual);
-	spec.fft2d(false);
+	Transforms.fft2d( spec, false);
 
     }
 
@@ -305,10 +343,12 @@ public class Grating_Search implements ij.plugin.PlugIn {
     @Override
     public void run(String arg) {
 
+	SimpleMT.useParallel(true);
+
 	// calculate gratings 3.2 .. 3.8 pxl size,
 	// allowing for 3 equi-distant phase shifts
 	Tool.tell("-- Compute all candidates --");
-	List<Grating> all = calcGrat(2.477,2.6, 3 );
+	List<Grating> all = calcGrat(3.2,3.4, 3 );
 
 	// collect pairs of 3 directions
 	Tool.tell("-- Compute direction combinations --");
@@ -328,8 +368,9 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	
 	Vec2d.Real gaussProfile = createGaussIllum( fsPxl/2.2, fsPxl);
 	
-	for (int i=0; i<Math.min( dirs.size(), 10); i++) {
-	    fourierCheck( dirs.get(i), gaussProfile, 0.03, 20, null, imgFourier); 
+	for (int i=0; i<Math.min( dirs.size(), 400); i++) {
+	    if (i%10==0) Tool.tell(" FFT "+i+"/"+Math.min(dirs.size(),400));
+	    fourierCheck( dirs.get(i), gaussProfile, 0.03, 20, true, imgSpatial, imgFourier, "i:"+i); 
 	}
 
 
@@ -378,7 +419,7 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	imgFourier.addImage( sum, "Sum", maskRings );
 	*/
 
-	//imgSpatial.display();
+	imgSpatial.display();
 	imgFourier.display();
 	
     }
