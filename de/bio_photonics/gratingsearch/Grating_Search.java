@@ -26,6 +26,11 @@ import org.fairsim.linalg.Vec2d;
 import org.fairsim.linalg.Transforms;
 import org.fairsim.sim_algorithm.SimUtils;
 
+import org.fairsim.fiji.DisplayWrapper;
+
+import org.fairsim.utils.ImageDisplay;
+import org.fairsim.utils.Tool; 
+
 import ij.ImagePlus;
 import ij.ImageStack;
 
@@ -176,16 +181,72 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	return ret;
     }
 
+    /** For a combination of gratings, check if a mask could block unwanted orders. 
+     *	@param candidates   List of gratings to check
+     *	@param maxUnwanted  Maximum ratio of amplitude passing through mask
+     *	@param maskSize	    Size of mask, in pixel
+     *	@param	spatial	    Receives spatial images of illuminated SLM, may be null
+     *	@param  fourier	    Receives Fourier images of illuminated SLM, may be null
+     * */
+    public boolean fourierCheck( Grating [] candidates, double maxUnwated, int maskSize,
+	ImageDisplay spatial, ImageDisplay fourier ) {
 
-    // TODO: Implement the fourier plane unwanted orders checks here
-    public void fourierCheck( List<Grating []> candidates ) {
+	Vec2d.Cplx     sumFreq = Vec2d.createCplx( fsPxl, fsPxl );
+	Vec2d.Cplx [] gratFreq = Vec2d.createArrayCplx( candidates.length, fsPxl, fsPxl );
+
+	Tool.Timer t1 = Tool.getTimer();
+	Tool.Timer t2 = Tool.getTimer();
+	Tool.Timer t3 = Tool.getTimer();
+	Tool.Timer t4 = Tool.getTimer();
+
+	// Compute the gratings Fourier space and sum them up
+	for ( int i=0; i<candidates.length; i++ ) {
+	    t1.start();
+	    candidates[i].writeToVector( gratFreq[i] );	// get grating as vector 
+	    t1.stop();
+
+	    t2.start();
+	    multGauss( gratFreq[i], fsPxl/2.2 );	// apply Gaussian illumination
+	    t2.stop();
+
+	    t3.start();
+	    gratFreq[i].fft2d(false);			// transform
+	    t3.stop();
+
+	    t4.start();
+	    Transforms.swapQuadrant(gratFreq[i]);	// quadrant-swap FFT result 
+	    sumFreq.add( gratFreq[i] );			// add to full vector
+	    t4.stop();
+
+	}
+
+
+	Tool.trace("Timing: "+t1+t2+t3+t4);
+
+	// store spectrum (if display is set != null)
+	if ( fourier!=null ) {
+	    
+	    // markers for positions
+	    ImageDisplay.Marker [] maskRings = new ImageDisplay.Marker[candidates.length*4];
+	    for ( int i=0; i<candidates.length; i++ ) {
+		double [] mPos = candidates[i].peakPos(fsPxl);
+		maskRings[i*4+0] = new ImageDisplay.Marker(256+mPos[0], 256+mPos[1], 10, 10, true);
+		maskRings[i*4+1] = new ImageDisplay.Marker(256-mPos[0], 256-mPos[1], 10, 10, true);
+		maskRings[i*4+2] = new ImageDisplay.Marker(256+mPos[0], 256+mPos[1], maskSize, maskSize, false);
+		maskRings[i*4+3] = new ImageDisplay.Marker(256-mPos[0], 256-mPos[1], maskSize, maskSize, false);
+	    }
+	    fourier.addImage(magnitude( sumFreq ), "Spectrum", maskRings);
+	}
+
+	return true;
 
     }
 
 
 
-    /** Multiply a Gaussian illumination profile */
-    public void multGauss( Vec2d.Real vec, double fwhm) {
+    /** Multiply a Gaussian illumination profile.
+     *  It would be much faster to cache this in a vector. */
+    public void multGauss( Vec2d.Cplx vec, double fwhm) {
 
 	final double sigma = fwhm/2.355;
 	final int w = vec.vectorWidth();
@@ -194,10 +255,10 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	for (int y=0; y<h; y++)
 	for (int x=0; x<w; x++) {
 
-	    double  val = vec.get(x,y);
+	    Cplx.Float  val = vec.get(x,y);
 	    double dist = Math.hypot( y-h/2. , x-w/2. );
 	    double fac = Math.exp( -(dist*dist) / (2 * sigma*sigma));
-	    vec.set(x,y, (float)(val*fac));
+	    vec.set(x,y, val.mult((float)fac));
 	}
     }
 
@@ -231,6 +292,14 @@ public class Grating_Search implements ij.plugin.PlugIn {
 
     }
 
+    /** Helper function, returns the magnitude of an input vector */
+    Vec2d.Real magnitude( Vec2d.Cplx in ) {
+	Vec2d.Real ret = Vec2d.createReal(in);
+	ret.copyMagnitude(in);
+	return ret;
+    }
+
+
 
     /** ImageJ plugin run method */
     @Override
@@ -238,54 +307,78 @@ public class Grating_Search implements ij.plugin.PlugIn {
 
 	// calculate gratings 3.2 .. 3.8 pxl size,
 	// allowing for 3 equi-distant phase shifts
-	System.out.println("-- Compute all candidates --");
+	Tool.tell("-- Compute all candidates --");
 	List<Grating> all = calcGrat(2.477,2.6, 3 );
 
 	// collect pairs of 3 directions
-	System.out.println("-- Compute direction combinations --");
+	Tool.tell("-- Compute direction combinations --");
 	List<Grating []> dirs = selectDirs(all, 3, 5*Math.PI/180.);
+	Tool.tell(" Number of possible combinations: "+dirs.size());
 
+	/*
 	for ( Grating [] i : dirs ) {
 	    System.out.println("---");
 	    for ( Grating j : i )
 		System.out.println( j.toString());
+	} */
+
+	// check if unwanted orders can be blocked by masking
+	//DisplayWrapper imgSpatial = new DisplayWrapper(fsPxl, fsPxl, "Spatial");
+	DisplayWrapper imgFourier = new DisplayWrapper(fsPxl, fsPxl, "Fourier");
+	
+	
+	for (int i=0; i<Math.min( dirs.size(), 10); i++) {
+	    fourierCheck( dirs.get(i), 0.03, 20, null, imgFourier); 
 	}
 
-	ImageStack isPttr = new ImageStack(512,512);
-	ImageStack isFfts = new ImageStack(512,512);
 
 
+	/*
+	
+	Vec2d.Real sum = Vec2d.createReal( fsPxl, fsPxl );
+	ImageDisplay.Marker [] maskRings = new ImageDisplay.Marker[6];
+	
 	for (int i=0; i<3; i++) {
 	    
-	    ImageVector testPttr = ImageVector.create(512,512);
+	    Vec2d.Real testPttr = Vec2d.createReal(512,512);
 	    dirs.get(0)[i].writeToVector( testPttr );
 	
-	    isPttr.addSlice("i:"+i, testPttr.img());
-	
-	    multGauss( testPttr, 210);
-	    SimUtils.fadeBorderCos(testPttr, 10);
+	    imgSpatial.addImage(testPttr, "i: "+i);
 
-	    for (int slm=0; slm<=1; slm++) {
-		Vec2d.Cplx fft = Vec2d.createCplx( testPttr );
-		fft.copy( testPttr );
-		if (slm==1) convSLMstructure( fft );
-		fft.fft2d(false);
+
+	    Vec2d.Cplx fft = Vec2d.createCplx( testPttr );
+	    fft.copy( testPttr );
+	    multGauss( fft, 210);
+	    //convSLMstructure( fft );
+	    fft.fft2d(false);
+		
+	    fft.scal(1.f/(fsPxl*fsPxl));
+
+	    ImageVector fftPttr = ImageVector.create(512,512);
+	    fftPttr.copyMagnitude( fft );
+
+	    Transforms.swapQuadrant( fftPttr );
+	    sum.add(fftPttr );
 	    
-		ImageVector fftPttr = ImageVector.create(512,512);
-		fftPttr.copyMagnitude( fft );
-		Transforms.swapQuadrant( fftPttr );
-		//fftPttr.normalize();
+	    // compute the mask position
+	    double [] mPos =  dirs.get(0)[i].peakPos(512);
+	    ImageDisplay.Marker mp1 = new ImageDisplay.Marker( 
+		256+mPos[0], 256+mPos[1], 10, 10, true);
+	    ImageDisplay.Marker mm1 = new ImageDisplay.Marker( 
+		256-mPos[0], 256-mPos[1], 10, 10, true);
 
+	    maskRings[2*i] =  mp1;
+	    maskRings[2*i+1] =  mm1;
 
-		isFfts.addSlice("fft i:"+i+" slm:"+slm, fftPttr.img());
-	    }
+	    imgFourier.addImage(fftPttr, "i: "+i, mp1, mm1);
+
 	}
 	
-	
-	ij.ImagePlus ip = new ij.ImagePlus("Pattern", isPttr);
-	ij.ImagePlus ip2 = new ij.ImagePlus("Pattern FFTs", isFfts);
-	ip.show();
-	ip2.show();
+	imgFourier.addImage( sum, "Sum", maskRings );
+	*/
+
+	//imgSpatial.display();
+	imgFourier.display();
 	
     }
 

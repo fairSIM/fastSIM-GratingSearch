@@ -18,6 +18,7 @@ along with the code.  If not, see <http://www.gnu.org/licenses/>
 package de.bio_photonics.gratingsearch;
 
 import org.fairsim.linalg.Vec2d;
+import org.fairsim.linalg.Cplx;
 
 /** Structure hold all parameters of a grating. 
 The original MATLAB code can be found here, please cite their
@@ -102,9 +103,29 @@ class Grating {
 	for (int y=0; y<vec.vectorHeight(); y++)
 	for (int x=0; x<vec.vectorWidth(); x++) {
 	    double val = Math.sin( Math.PI/2 + x*kx + y*ky + 1e-4);
-	    
 	    vec.set(x,y, (val>0)?(1):(-1));
 	}
+    }
+
+    /** Write the (binary, -1, 1) pattern to a vector */
+    public void writeToVector(Vec2d.Cplx vec) {
+    
+	double kx = (2*Math.PI / gratPer) * Math.sin(gratDir );
+	double ky = (2*Math.PI / gratPer) * Math.cos(gratDir );
+
+	for (int y=0; y<vec.vectorHeight(); y++)
+	for (int x=0; x<vec.vectorWidth(); x++) {
+	    double val = Math.sin( Math.PI/2 + x*kx + y*ky + 1e-4);
+	    vec.set(x,y, new Cplx.Float( (val>0)?(1):(-1), 0 ));
+	}
+    }
+    
+    /** Calculate the Fourier peak position caused by the grating,
+     *  for a DFT of size n */
+    public double [] peakPos(int n) {
+	
+	double len = n / gratPer;
+	return new double [] { Math.sin(gratDir)*len, Math.cos(gratDir)*len };
 
     }
 
