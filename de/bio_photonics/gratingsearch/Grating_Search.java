@@ -21,10 +21,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.fairsim.fiji.ImageVector;
+import org.fairsim.linalg.Cplx;
 import org.fairsim.linalg.Vec2d;
 import org.fairsim.linalg.Transforms;
 import org.fairsim.sim_algorithm.SimUtils;
-
 
 import ij.ImagePlus;
 import ij.ImageStack;
@@ -184,6 +184,53 @@ public class Grating_Search implements ij.plugin.PlugIn {
 
 
 
+    /** Multiply a Gaussian illumination profile */
+    public void multGauss( Vec2d.Real vec, double fwhm) {
+
+	final double sigma = fwhm/2.355;
+	final int w = vec.vectorWidth();
+	final int h = vec.vectorHeight();
+	
+	for (int y=0; y<h; y++)
+	for (int x=0; x<w; x++) {
+
+	    double  val = vec.get(x,y);
+	    double dist = Math.hypot( y-h/2. , x-w/2. );
+	    double fac = Math.exp( -(dist*dist) / (2 * sigma*sigma));
+	    vec.set(x,y, (float)(val*fac));
+	}
+    }
+
+    /** Convolve a Fourier spectrum with the residual SLM structure */
+    public void convSLMstructure(Vec2d.Cplx spec) {
+
+	spec.fft2d(true);
+	Vec2d.Cplx residual = Vec2d.createCplx(spec);
+
+	final int w = spec.vectorWidth();
+	final int h = spec.vectorWidth();
+
+	// structure directly from the original matlab script
+	residual.set( 0,   h/2-1, Cplx.Float.one().mult(0.08f));   // top
+	residual.set( w-1, h/2-1, Cplx.Float.one().mult(0.08f));   // bottom
+	
+	residual.set( w/4-1,   0, Cplx.Float.one().mult(0.03f));   // top left
+	residual.set( w*3/4-1, 0, Cplx.Float.one().mult(0.03f));   // bottom left
+	
+	residual.set( w/4-1,   h/2-1, Cplx.Float.one().mult(0.03f));   // top left
+	residual.set( w*3/4-1, h/2-1, Cplx.Float.one().mult(0.03f));   // bottom left
+
+	residual.set( w/2-1, h/2-1, Cplx.Float.one());    // zero order
+
+	// TODO: check if this is what matlabs conv2 would do
+	Transforms.swapQuadrant( residual );
+	residual.fft2d(true);
+
+	spec.times(residual);
+	spec.fft2d(false);
+
+    }
+
 
     /** ImageJ plugin run method */
     @Override
@@ -192,7 +239,7 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	// calculate gratings 3.2 .. 3.8 pxl size,
 	// allowing for 3 equi-distant phase shifts
 	System.out.println("-- Compute all candidates --");
-	List<Grating> all = calcGrat(3.2,3.4, 3 );
+	List<Grating> all = calcGrat(2.477,2.6, 3 );
 
 	// collect pairs of 3 directions
 	System.out.println("-- Compute direction combinations --");
@@ -218,18 +265,20 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	    multGauss( testPttr, 210);
 	    SimUtils.fadeBorderCos(testPttr, 10);
 
-	    Vec2d.Cplx fft = Vec2d.createCplx( testPttr );
-	    fft.copy( testPttr );
-	    fft.fft2d(false);
-	
-	    ImageVector fftPttr = ImageVector.create(512,512);
-	    fftPttr.copyMagnitude( fft );
-	    Transforms.swapQuadrant( fftPttr );
-	    fftPttr.normalize();
+	    for (int slm=0; slm<=1; slm++) {
+		Vec2d.Cplx fft = Vec2d.createCplx( testPttr );
+		fft.copy( testPttr );
+		if (slm==1) convSLMstructure( fft );
+		fft.fft2d(false);
+	    
+		ImageVector fftPttr = ImageVector.create(512,512);
+		fftPttr.copyMagnitude( fft );
+		Transforms.swapQuadrant( fftPttr );
+		//fftPttr.normalize();
 
 
-	    isFfts.addSlice("fft i:"+i, fftPttr.img());
-	
+		isFfts.addSlice("fft i:"+i+" slm:"+slm, fftPttr.img());
+	    }
 	}
 	
 	
@@ -240,23 +289,6 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	
     }
 
-
-    /** Multiply a Gaussian illumination profile */
-    public void multGauss( Vec2d.Real vec, double fwhm) {
-
-	final double sigma = fwhm/2.355;
-	final int w = vec.vectorWidth();
-	final int h = vec.vectorHeight();
-	
-	for (int y=0; y<h; y++)
-	for (int x=0; x<w; x++) {
-
-	    double  val = vec.get(x,y);
-	    double dist = Math.hypot( y-h/2. , x-w/2. );
-	    double fac = Math.exp( -(dist*dist) / (2 * sigma*sigma));
-	    vec.set(x,y, (float)(val*fac));
-	}
-    }
 
     
     /** main method */
