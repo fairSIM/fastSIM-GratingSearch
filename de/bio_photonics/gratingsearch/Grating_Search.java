@@ -261,7 +261,7 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	if ( (spatial != null) && (outputAlsoFailed || ok)) {
 	    for (int i=0; i<candidates.length; i++) {
 		Vec2d.Real img = Vec2d.createReal( fsPxl, fsPxl );
-		candidates[i].writeToVector(img);
+		candidates[i].writeToVector(img,0);
 		img.times(illum);
 		spatial.addImage( img, name+" ang: "+i+" "+candidates[i] );
 	    }
@@ -350,11 +350,13 @@ public class Grating_Search implements ij.plugin.PlugIn {
      *  @param mask_size Size of holes in mask, in #pxl
      *  @param max_unwanted Maximal contribution of unwanted orders
      *  @param output_failed If to output also failed pattern
+     *  @return List of matching gratings
      *  */
-    public void calculate(double gratMin, double gratMax, 
+    public List<Grating []> calculate(double gratMin, double gratMax, 
 	int phases, int nr_dir, double max_angle, int mask_size, 
 	double max_unwanted, boolean output_failed) {
 
+	List<Grating []> resultList = new ArrayList<Grating []>();
 	SimpleMT.useParallel(true);
 
 	// calculate gratings 3.2 .. 3.8 pxl size,
@@ -390,13 +392,17 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	    boolean ok = fourierCheck( dirs.get(i), gaussProfile, max_unwanted, mask_size, 
 		output_failed, imgSpatial, imgFourier, "i:"+i); 
 	    
-	    if (ok) countOk++;
+	    if (ok) {
+		countOk++;
+		resultList.add( dirs.get(i));
+	    }
 	}
 	
 	imgSpatial.display();
 	imgFourier.display();
 	Tool.trace("    Number of pattern after modulation check: "+ countOk);
-
+	
+	return resultList;
     }
 
     // ---- Start methods ----
@@ -448,8 +454,15 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	boolean outputFailed=gd.getNextBoolean();
 	
 	// run the actual calculation
-	calculate( gratMin, gratMax, nrPhases, nrDirs, maxAngleDev, maskSize,
+	List<Grating []> res = calculate( gratMin, gratMax, nrPhases, 
+	    nrDirs, maxAngleDev, maskSize,
 	    maxUnwMod, outputFailed);
+
+	// store the result, if any
+	if (res.size()>0) {
+	    ij.IJ.setProperty("de.bio_photonics.gratingsearch.phaseNumber", nrPhases);
+	    ij.IJ.setProperty("de.bio_photonics.gratingsearch.lastGratings", res);
+	}
 
 	// output parameters at end of log
 	Tool.tell(String.format("# Parameters: gMin %5.3f gMax %5.3f "+
