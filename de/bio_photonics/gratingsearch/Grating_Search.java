@@ -183,12 +183,14 @@ public class Grating_Search implements ij.plugin.PlugIn {
 
     /** For a combination of gratings, check if a mask could block unwanted orders. 
      *	@param candidates   List of gratings to check
+     *	@param illum	    Illumination vector to apply
      *	@param maxUnwanted  Maximum ratio of amplitude passing through mask
      *	@param maskSize	    Size of mask, in pixel
      *	@param	spatial	    Receives spatial images of illuminated SLM, may be null
      *	@param  fourier	    Receives Fourier images of illuminated SLM, may be null
      * */
-    public boolean fourierCheck( Grating [] candidates, double maxUnwated, int maskSize,
+    public boolean fourierCheck( Grating [] candidates, Vec2d.Real illum, 
+	double maxUnwated, int maskSize,
 	ImageDisplay spatial, ImageDisplay fourier ) {
 
 	Vec2d.Cplx     sumFreq = Vec2d.createCplx( fsPxl, fsPxl );
@@ -198,6 +200,7 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	Tool.Timer t2 = Tool.getTimer();
 	Tool.Timer t3 = Tool.getTimer();
 	Tool.Timer t4 = Tool.getTimer();
+	Tool.Timer t5 = Tool.getTimer();
 
 	// Compute the gratings Fourier space and sum them up
 	for ( int i=0; i<candidates.length; i++ ) {
@@ -206,7 +209,7 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	    t1.stop();
 
 	    t2.start();
-	    multGauss( gratFreq[i], fsPxl/2.2 );	// apply Gaussian illumination
+	    gratFreq[i].times( illum );
 	    t2.stop();
 
 	    t3.start();
@@ -220,10 +223,8 @@ public class Grating_Search implements ij.plugin.PlugIn {
 
 	}
 
-
-	Tool.trace("Timing: "+t1+t2+t3+t4);
-
 	// store spectrum (if display is set != null)
+	t5.start();
 	if ( fourier!=null ) {
 	    
 	    // markers for positions
@@ -237,29 +238,28 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	    }
 	    fourier.addImage(magnitude( sumFreq ), "Spectrum", maskRings);
 	}
+	t5.stop();
 
+	Tool.trace("Timing: "+t1+t2+t3+t4+t5);
 	return true;
 
     }
 
 
-
-    /** Multiply a Gaussian illumination profile.
-     *  It would be much faster to cache this in a vector. */
-    public void multGauss( Vec2d.Cplx vec, double fwhm) {
+    /** Create a Gaussian illumination profile. */
+    public Vec2d.Real createGaussIllum( double fwhm, int size) {
 
 	final double sigma = fwhm/2.355;
-	final int w = vec.vectorWidth();
-	final int h = vec.vectorHeight();
-	
-	for (int y=0; y<h; y++)
-	for (int x=0; x<w; x++) {
+	Vec2d.Real vec = Vec2d.createReal(size,size);
 
-	    Cplx.Float  val = vec.get(x,y);
-	    double dist = Math.hypot( y-h/2. , x-w/2. );
+	for (int y=0; y<size; y++)
+	for (int x=0; x<size; x++) {
+
+	    double dist = Math.hypot( y-size/2. , x-size/2. );
 	    double fac = Math.exp( -(dist*dist) / (2 * sigma*sigma));
-	    vec.set(x,y, val.mult((float)fac));
+	    vec.set(x,y, (float)fac);
 	}
+	return vec;
     }
 
     /** Convolve a Fourier spectrum with the residual SLM structure */
@@ -323,12 +323,13 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	} */
 
 	// check if unwanted orders can be blocked by masking
-	//DisplayWrapper imgSpatial = new DisplayWrapper(fsPxl, fsPxl, "Spatial");
+	DisplayWrapper imgSpatial = new DisplayWrapper(fsPxl, fsPxl, "Spatial");
 	DisplayWrapper imgFourier = new DisplayWrapper(fsPxl, fsPxl, "Fourier");
 	
+	Vec2d.Real gaussProfile = createGaussIllum( fsPxl/2.2, fsPxl);
 	
 	for (int i=0; i<Math.min( dirs.size(), 10); i++) {
-	    fourierCheck( dirs.get(i), 0.03, 20, null, imgFourier); 
+	    fourierCheck( dirs.get(i), gaussProfile, 0.03, 20, null, imgFourier); 
 	}
 
 
