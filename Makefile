@@ -2,7 +2,8 @@
 .PHONY: all clean
 
 # Options for the java compiler
-JFLAGS = -g -Xlint:unchecked -extdirs "./external"
+JFLAGS = -g -Xlint:unchecked -extdirs "./external" -d ./
+JFLAGS+= -target 1.6 -source 1.6
 JC = javac6
 JAR = jar
 
