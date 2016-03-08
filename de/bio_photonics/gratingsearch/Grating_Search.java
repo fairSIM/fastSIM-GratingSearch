@@ -46,9 +46,9 @@ https://github.com/nanoimaging/fastSIM_GratingSearchforSLM
 public class Grating_Search implements ij.plugin.PlugIn {
 
     // search value space
-    final int axmax = 28, aymax = 28;
+    final int axmax = 40, aymax = 40;
     final int bxmin = 2,  bymin = 2;
-    final int bxmax = 28, bymax = 28;
+    final int bxmax = 40, bymax = 40;
 
     // fourier space pxl
     final int fsPxl = 512;
@@ -120,10 +120,11 @@ public class Grating_Search implements ij.plugin.PlugIn {
     private static boolean fuzzyAdd( Grating a , List<Grating> candidates ) {
 	
 	// Tolerance when looking for equal direction, in rad
-	final double tolDir = 1e-5;
+	final double tolDir = 1e-8;
 	
 	for ( Grating b : candidates )
 	    if ( Math.abs( b.gratDir  - a.gratDir ) < tolDir )
+	    if ( Math.abs( b.gratPer  - a.gratPer ) < tolDir )
 		return false;
 	
 	candidates.add( a );
@@ -350,11 +351,12 @@ public class Grating_Search implements ij.plugin.PlugIn {
      *  @param mask_size Size of holes in mask, in #pxl
      *  @param max_unwanted Maximal contribution of unwanted orders
      *  @param output_failed If to output also failed pattern
+     *  @param max_candidates How many candidates to calculate in first step
      *  @return List of matching gratings
      *  */
     public List<Grating []> calculate(double gratMin, double gratMax, 
 	int phases, int nr_dir, double max_angle, int mask_size, 
-	double max_unwanted, boolean output_failed) {
+	double max_unwanted, boolean output_failed, final int max_candidates) {
 
 	List<Grating []> resultList = new ArrayList<Grating []>();
 	SimpleMT.useParallel(true);
@@ -383,7 +385,7 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	DisplayWrapper imgFourier = new DisplayWrapper(fsPxl, fsPxl, "Fourier");
 	
 	Vec2d.Real gaussProfile = createGaussIllum( fsPxl/2.2, fsPxl);
-	int countOk=0, maxCheck = Math.min( dirs.size(), 400);
+	int countOk=0, maxCheck = Math.min( dirs.size(), max_candidates);
 
 	for (int i=0; i< maxCheck ; i++) {
 	    
@@ -438,7 +440,9 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	gd.addNumericField("max_unwanted_modulation",0.015,3);
 	gd.addNumericField("mask_size(pxl)", 25, 0);
 	gd.addCheckbox("Output_also_failed", false);
-    
+	gd.addMessage("Cancel");
+	gd.addNumericField("max_nr_candidates",2000,0);
+
 	gd.showDialog();
 	if (gd.wasCanceled())
 	    return;
@@ -452,11 +456,12 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	double maxUnwMod   = gd.getNextNumber();
 	int maskSize  = (int)gd.getNextNumber();
 	boolean outputFailed=gd.getNextBoolean();
+	final int maxCandidates  = (int)gd.getNextNumber();
 	
 	// run the actual calculation
 	List<Grating []> res = calculate( gratMin, gratMax, nrPhases, 
 	    nrDirs, maxAngleDev, maskSize,
-	    maxUnwMod, outputFailed);
+	    maxUnwMod, outputFailed, maxCandidates);
 
 	// store the result, if any
 	if (res.size()>0) {
@@ -466,8 +471,8 @@ public class Grating_Search implements ij.plugin.PlugIn {
 
 	// output parameters at end of log
 	Tool.tell(String.format("# Parameters: gMin %5.3f gMax %5.3f "+
-	    " #Phases %1d  #Orientations %1d", gratMin, gratMax,
-	    nrPhases, nrDirs));
+	    " #Phases %1d  #Orientations %1d, max candidates: %d", gratMin, gratMax,
+	    nrPhases, nrDirs, maxCandidates));
 	Tool.tell(String.format("# Search param: max angle deviation (deg): %6.0f",
 	    maxAngleDev));
 	Tool.tell(String.format("# Search param:   max unwanted modulation: %6.4f",
@@ -502,7 +507,7 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	int nrDirs     = Integer.parseInt( args[3] );
 
 	gs.calculate(gratMin, gratMax, nrPhases, 
-	    nrDirs, 3./180*Math.PI, 20, 0.02, false);
+	    nrDirs, 3./180*Math.PI, 20, 0.02, false, 400);
     }
 
 
