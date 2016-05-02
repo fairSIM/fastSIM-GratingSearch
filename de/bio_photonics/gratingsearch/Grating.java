@@ -34,15 +34,24 @@ class Grating {
     final double gratDir;	// orientation of grating in rad
     final double gratPer;	// grating period, in pxl
     int shiftDir = -1;		// 0-horizontal, 1-vertical, -1 undef.
+    final double wavelength;	// the exitation wavelength for this grating
+    
+    final double posX, posY;
 
     /** create and calculate grating from pxl sizes */
-    Grating(int iax, int iay, int ibx, int iby) {
+    Grating(int iax, int iay, int ibx, int iby, double wavelength) {
+
+	this.wavelength=wavelength;
+
 	ax = iax; ay = iay; bx = ibx; by = iby;
 	
 	gratDir = Math.atan2(ay, ax);
 	double theta	= Math.atan2( by, bx ) ;
 	gratPer =	Math.hypot( bx, by ) * 
 		    Math.abs( Math.sin( gratDir-theta ));
+    
+	posX = gratPer * Math.cos( gratDir );
+	posY = gratPer * Math.sin( gratDir );
     }
 
 
@@ -78,6 +87,16 @@ class Grating {
 
 	return ( lcm(abs(ax2),abs(bx))*(ay2/ax2-by/bx) % nPhases == 0 );
     }
+
+    /** returns the euclidan distance between two gratings, scaled by their wavelength */
+    public static double scaledDistance( Grating a, Grating b ) {
+	double avrWavelength = (a.wavelength + b.wavelength)/2;
+	double dx = a.posX/a.wavelength - b.posX/b.wavelength ;
+	double dy = a.posY/a.wavelength - b.posY/b.wavelength ;
+	double dist = Math.hypot( dy, dx );
+	return dist*avrWavelength;
+    }
+
 
 
     /** returns true if the pattern direction is within given range */
