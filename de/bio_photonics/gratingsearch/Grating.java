@@ -22,6 +22,9 @@ import org.fairsim.linalg.Cplx;
 import org.fairsim.linalg.MTool;
 import org.fairsim.utils.SimpleMT;
 
+import java.util.List;
+import java.util.ArrayList;
+
 /** Structure hold all parameters of a grating. 
 The original MATLAB code can be found here, please cite their
 publication if you use this software to create SIM gratings:

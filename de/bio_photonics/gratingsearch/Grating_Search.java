@@ -133,6 +133,24 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	return true;
     }
 
+    /** Helper: returns the set with the lowest average euclidean distance */
+    private static Grating [] lowestAvrEuclDist( Grating [] a, List< Grating [] > b ) {
+	double minAvr = Double.MAX_VALUE;
+	Grating [] ret = null;
+
+	for ( Grating [] c : b ) {
+	    double avr=0;
+	    for ( int l=0; l<a.length; l++) 
+		avr += Grating.scaledDistance( a[l],c[l]);
+	    if (avr<minAvr) {
+		ret = c;
+		minAvr=avr;
+	    }
+	}
+	return ret;
+    }
+
+
 
     /** Select combinations of grating orientations.
      *  From a list of possible gratings, generate subsets
@@ -144,23 +162,20 @@ public class Grating_Search implements ij.plugin.PlugIn {
      *  @param tolDirection Allowed deviation from ideal angle, in rad
      *	@return List of matching grating combinations
      *	*/
-    public List<Grating [][]> selectDirs( 
-	List< List<Grating> > candidates,
-	final int nrWavelength, 
+    public List<Grating []> selectDirs( 
+	List< Grating > candidates,
 	final int nrDirs, 
-	final double tolDirection,
-	final double tolBetweenWavelenth,
-	final int maxCandidates ) {
+	final double tolDirection) {
 
 	double sector = Math.PI/nrDirs;
 
 	int count=0;
-	int maxCount = candidates.get(0).size();
+	int maxCount = candidates.size();
     
-	List<Grating [][]> ret = new ArrayList<Grating [][]>(maxCandidates);
+	List<Grating []> ret = new ArrayList<Grating []>();
 
 	// outer loop, select only dirs in the first sector
-	for ( Grating c : candidates.get(0) ) {
+	for ( Grating c : candidates ) {
 	    
 	    count++;
 	    if (count%100==0)
@@ -170,19 +185,18 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	    if (!c.testDirection(0, sector)) continue;
 
 	    // create the array
-	    Grating [][] col = new Grating[nrWavelength][nrDirs];
-	    col[0][0] = c;
-
+	    Grating [] col = new Grating[nrDirs];
+	    col[0] = c;
 
 	    // see if the other directions can be found within limits
 	    for (int i=1; i<nrDirs; i++) {
 		double minDist=tolDirection;
-		for ( Grating d : candidates.get(0) ) {
+		for ( Grating d : candidates ) {
 		    double dist =  Math.abs(
 			    Grating.wrapPi(d.gratDir) - sector*i - 
 			    Grating.wrapPi(c.gratDir) );
 		    if ( dist < minDist ) {
-			col[0][i]  = d;
+			col[i]  = d;
 			minDist = dist;
 		    }
 		}
@@ -190,39 +204,10 @@ public class Grating_Search implements ij.plugin.PlugIn {
 
 	    // check if a complete set was found
 	    boolean complete = true;
-	    for ( Grating e : col[0] )
+	    for ( Grating e : col )
 		if ( e == null ) continue;
-
-
-	    // for all other wavelength, find the grating with minimal
-	    // euclidian distance (corrected with wavelength to our candidate)
-	    boolean allFound = true;
-	    for (int  i=0; i<nrDirs; i++) {
-		for (int ch=1; ch<nrWavelength; ch++) {
-		    
-		    double minDist = Double.MAX_VALUE;
-		    for ( Grating d : candidates.get(ch) ) {
-			double dist = Grating.scaledDistance( col[0][i], d );
-			if (dist < minDist) {
-			    minDist = dist;
-			    col[ch][i] = d;
-			}
-		    }
-		    // break the loop if no candidate was found within
-		    // set distance limit
-		    if (minDist > tolBetweenWavelenth)
-			allFound = false;
-
-		}
-	    }
-	    
-	   
-	    // only if all is good, add candidate to list
-	    if (!allFound) continue;
+  
 	    ret.add( col );
-
-	    if ( ret.size() > maxCandidates )
-		break;
 	}
 	return ret;
     }
@@ -420,23 +405,152 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	    Tool.trace(String.format(" %5.0f nm : %d candidates", wavelength[ch], candidate.size()));
 	}
 
-	// check for candidates that overlap, so they fit through the same mask
-	Tool.trace("-- Compute direction combinations --");
-	List<Grating [][]> dirs = selectDirs(all, wavelength.length, nr_dir, 
-	    max_angle, max_euclDist, max_candidates);
-	Tool.trace("   remaining number of possible combinations: "+dirs.size());
 
-	/*
-	for ( Grating [] i : dirs ) {
-	    System.out.println("---");
-	    for ( Grating j : i )
-		System.out.println( j.toString());
-	} */
+	// for the first, main wavelength, get a list of matching gratings...
+	Tool.trace("-- Compute direction combinations (main wavelength) --");
+	List<Grating []> dirs = selectDirs(all.get(0), nr_dir, max_angle);
+	Tool.trace("   grating pairs for main wavelength: "+dirs.size());
 
-	// check if unwanted orders can be blocked by masking
-	Tool.trace("-- Compute wanted vs. unwanted orders --");
+	// run these pairs through fouier checking ...
+	Tool.trace("-- Main wavelength: compute wanted vs. unwanted orders --");
+
+	List<Grating []> modOk = new ArrayList<Grating []>();
+	
+	Vec2d.Real gaussProfile = createGaussIllum( fsPxl/2.2, fsPxl);
+	int countOk=0;
+	for (int i=0; i< dirs.size() ; i++) {
+	    
+	    if (i%10==0) Tool.tell(" FFT "+i+"/"+dirs.size()+" ok: "+countOk);
+	    
+	    boolean ok = fourierCheck( dirs.get(i), gaussProfile, max_unwanted, mask_size, 
+		    false, null, null, "i:"+i); 
+	    
+	    if (ok) {
+		countOk++;
+		modOk.add( dirs.get(i) );
+	    }
+	    if (countOk>=max_candidates)
+		break;
+	}
+
+	Tool.trace(" main wavelength grating sets passing Fourier check: "+countOk);
+
+	
 	DisplayWrapper imgSpatial = new DisplayWrapper(fsPxl, fsPxl, "Spatial");
 	DisplayWrapper imgFourier = new DisplayWrapper(fsPxl, fsPxl, "Fourier");
+
+	// now, try to find matching secondary and tertiary wavelength ...
+	
+	Tool.trace("-- Generating candidates at addition wavelength --");
+
+	for ( Grating [] currentGrating : modOk ) {	    // loop each candidate
+
+	    List< List< Grating [] >> otherWavelength = new ArrayList< List< Grating []> >();
+	    boolean hasCandidatesForAll=true;
+
+	    // for each additional channels ...
+	    for (int ch = 1 ; ch < wavelength.length; ch++ ) {
+
+		// ... create a list of candidates for that wavelength by...
+		List< List<Grating> > directionCandidates = new ArrayList<List <Grating>>(nr_dir);
+		
+		// ... for every orientation: find all gratings that are in o.k.
+		// eucl. distance to the main wavelength grating ...
+		for (int d=0; d<nr_dir; d++) {  
+		    Grating main = currentGrating[d];
+		    List<Grating> thisDir = new ArrayList<Grating>();
+		    for ( Grating cand : all.get(ch) ) {
+			if ( Grating.scaledDistance( cand, main ) > max_euclDist)
+			    continue;
+			thisDir.add(cand);
+		    }
+		    directionCandidates.add(thisDir);
+		}
+	       
+		// ... check if there are combinations available for all directions ..
+		boolean candidatesAvailableForAllDir = true;
+		for (int d=0; d<nr_dir; d++) {
+		    if ( directionCandidates.get(d).size() == 0 )
+			candidatesAvailableForAllDir=false;
+		}
+		if (!candidatesAvailableForAllDir) {
+		    hasCandidatesForAll = false;
+		    continue;
+		}
+	
+
+		// ... create some random combinations of these ...
+		Grating [][] combinations = new Grating[max_candidates][nr_dir];
+		for (int i=0; i<max_candidates; i++) {
+		    for (int d=0; d<nr_dir; d++) {
+			List<Grating> forThisDir = directionCandidates.get(d);
+			combinations[i][d] = forThisDir.get( (int)
+			    (Math.random() * forThisDir.size()) );
+		    }
+		}
+
+		// ... and Fourier-check these combinations
+		List< Grating []> secondaryList = new ArrayList< Grating [] >();
+		countOk =0;
+		for (int i=0; i<max_candidates; i++) {
+
+		    if (i%10==0) Tool.tell(" FFT "+i+"/"+max_candidates+" ok: "+countOk);
+		
+		    boolean ok = fourierCheck( combinations[i], gaussProfile, max_unwanted, mask_size, 
+			false, null, null, "i:"+i); 
+		
+		    if (ok) {
+			countOk++;
+			secondaryList.add( combinations[i] );
+		    }
+		    if (countOk>=max_candidates ) {
+			break;
+		    }
+		}
+		
+		// if we did not find any candidates, set the bool to false
+		if (countOk==0)
+		    hasCandidatesForAll = false;
+		
+		otherWavelength.add( secondaryList );
+
+	    }
+
+	    // output some success
+	    if (hasCandidatesForAll) {
+		String res="1";
+		for (int ch=1; ch<wavelength.length; ch++)
+		    res+=" "+otherWavelength.get(ch-1).size();
+
+		Tool.trace("found a full combination, adding it to final results:" +res);
+	    
+		Grating [][] fullSet = new Grating[wavelength.length][];
+
+		fullSet[0] = currentGrating;
+		for (int ch=1; ch<wavelength.length; ch++)
+		    fullSet[ch] = lowestAvrEuclDist( currentGrating, otherWavelength.get(ch-1));
+		
+
+		// run the fourier check again, just so we can show the output
+		for (int ch=0; ch<wavelength.length; ch++)
+		    fourierCheck( fullSet[ch], gaussProfile, max_unwanted, mask_size, 
+			true, imgSpatial, imgFourier, "ch: "+ch); 
+
+
+		// add to the results
+		resultList.add( fullSet );
+	    }
+
+	}
+	
+	imgSpatial.display();
+	imgFourier.display();
+	
+	Tool.trace("    Number of full sets of pattern "+ resultList.size());
+
+	/*
+	// check if unwanted orders can be blocked by masking
+	Tool.trace("-- Compute wanted vs. unwanted orders --");
 	
 	Vec2d.Real gaussProfile = createGaussIllum( fsPxl/2.2, fsPxl);
 	int countOk=0;
@@ -457,10 +571,8 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	    }
 	}
 	
-	imgSpatial.display();
-	imgFourier.display();
 	Tool.trace("    Number of pattern after modulation check: "+ countOk);
-	
+	*/
 	return resultList;
     }
 
@@ -488,16 +600,14 @@ public class Grating_Search implements ij.plugin.PlugIn {
 
 	gd.addMessage("System parameters");
 	gd.addNumericField("proj. SLM pixel size (nm)", 70, 1);
-	gd.addNumericField("resolution enhancement average  (at NA 1.45)", 1.75, 2);
-	gd.addNumericField("resolution enhancement range +- (at NA 1.45)", 0.03, 2);
+	gd.addNumericField("objectives NA            ", 1.45, 2);
+	gd.addNumericField("resolution enhancement average  ", 1.75, 2);
+	gd.addNumericField("resolution enhancement range +- ", 0.03, 2);
 
 	gd.addMessage("Wavelength to analyse");
-	gd.addCheckbox("include in calc", true);
-	gd.addNumericField("wavelength 1: ", 488, 0);
-	gd.addCheckbox("include in calc", true);
-	gd.addNumericField("wavelength 2: ", 568, 0);
-	gd.addCheckbox("include in calc", true);
-	gd.addNumericField("wavelength 3: ", 647, 0);
+	gd.addNumericField("main wavelength  : ", 488, 0);
+	gd.addNumericField(" add wavelength 1: ", 568, 0);
+	gd.addNumericField( "add wavelength 2: ", 647, 0);
 
 	gd.addMessage("Pattern parameters");
 	gd.addNumericField("#phases", 3, 0);
@@ -509,7 +619,7 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	gd.addNumericField("mask_size(pxl)", 15, 0);
 	gd.addCheckbox("Output_also_failed", false);
 	gd.addMessage("Cancel");
-	gd.addNumericField("max_nr_candidates",500,0);
+	gd.addNumericField("max_nr_candidates",50,0);
 
 	gd.showDialog();
 	if (gd.wasCanceled())
@@ -518,15 +628,14 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	// ---- get parameters ----
 	
 	final double pxlSize	    = gd.getNextNumber();
+	final double objNA	    = gd.getNextNumber();
 	final double resImpAvr	    = gd.getNextNumber();
 	final double resImpRange    = gd.getNextNumber();
 
 	final double  [] wavelength	= new double[3];
-	final boolean [] doWavelength	= new boolean[3];
 
 	for (int i=0; i<3; i++) {
 	    wavelength[i]   = gd.getNextNumber();
-	    doWavelength[i] = gd.getNextBoolean();
 	}
 	
 	final int nrPhases  = (int)gd.getNextNumber();
@@ -550,13 +659,14 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	//  resImp  : factor of resolution improvement, e.g. 1.75x
 	//  pxlSize : projected pixel size 
 	//
-	final double objNA = 1.45;
 
 	final double resImpMin = resImpAvr - resImpRange;
 	final double resImpMax = resImpAvr + resImpRange;
 
 	IJ.log(String.format("Searching pattern for res. improvement %7.4f -- %7.4f",
 	    resImpMin, resImpMax ));
+
+	IJ.log(String.format("Objective %7.4f NA, proj. SLM pixels %5.1f nm", objNA, pxlSize));
 
 	double [] gratMin = new double[3];
 	double [] gratMax = new double[3];
