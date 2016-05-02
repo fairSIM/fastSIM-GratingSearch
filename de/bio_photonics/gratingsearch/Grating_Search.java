@@ -534,11 +534,17 @@ public class Grating_Search implements ij.plugin.PlugIn {
 		// run the fourier check again, just so we can show the output
 		for (int ch=0; ch<wavelength.length; ch++)
 		    fourierCheck( fullSet[ch], gaussProfile, max_unwanted, mask_size, 
-			true, imgSpatial, imgFourier, "ch: "+ch); 
+			true, imgSpatial, imgFourier, String.format(
+			    "i: %2d wl:%3.0f", resultList.size(), wavelength[ch] )); 
 
 
-		// add to the results
-		resultList.add( fullSet );
+		// resort (wavelength last, for output)
+		Grating [][] fullSetResorted = new Grating[nr_dir][wavelength.length];
+		for (int ch=0; ch<wavelength.length; ch++)
+		for (int d=0; d<nr_dir; d++)
+		    fullSetResorted[d][ch] = fullSet[ch][d];
+
+		resultList.add( fullSetResorted );
 	    }
 
 	}
@@ -688,23 +694,11 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	    nrDirs, maxAngleDev, maskSize,
 	    maxUnwMod, maxEuclDist, outputFailed, maxCandidates);
 
-	/*
 	// store the result, if any
 	if (res.size()>0) {
 	    ij.IJ.setProperty("de.bio_photonics.gratingsearch.phaseNumber", nrPhases);
 	    ij.IJ.setProperty("de.bio_photonics.gratingsearch.lastGratings", res);
 	}
-
-	// output parameters at end of log
-	Tool.tell(String.format("# Parameters: gMin %5.3f gMax %5.3f "+
-	    " #Phases %1d  #Orientations %1d, max candidates: %d", gratMin, gratMax,
-	    nrPhases, nrDirs, maxCandidates));
-	Tool.tell(String.format("# Search param: max angle deviation (deg): %6.0f",
-	    maxAngleDev));
-	Tool.tell(String.format("# Search param:   max unwanted modulation: %6.4f",
-	    maxUnwMod));
-	Tool.tell("# Search param: Mask size: "+maskSize);
-	*/
 
     }
     

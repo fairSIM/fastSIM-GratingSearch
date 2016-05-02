@@ -50,10 +50,10 @@ public class Generate_Grating implements ij.plugin.PlugIn {
 
 	Object a= IJ.getProperty("de.bio_photonics.gratingsearch.lastGratings");
 	List tmp = ( a instanceof List )?((List)a):(null);
-	List<Grating []> gratList = new ArrayList<Grating []>();
+	List<Grating [][]> gratList = new ArrayList<Grating [][]>();
 
 	for ( Object b : tmp ) 
-	    if ( b instanceof Grating[] ) gratList.add((Grating [])b);    
+	    if ( b instanceof Grating[][] ) gratList.add((Grating [][])b);    
 	
 
 	if (gratList !=null && gratList.size()==0) {
@@ -85,13 +85,15 @@ public class Generate_Grating implements ij.plugin.PlugIn {
 	DisplayWrapper img = new DisplayWrapper(width, height, "Pattern");
 
 	int ang=0;
-	for ( Grating gr : gratList.get(nr) ) {
+	for ( Grating [] gr : gratList.get(nr) ) {
 	    for (int pha =0; pha<nrPhases; pha++) {
 		double phase = pha*Math.PI*2/nrPhases;
 
 		Vec2d.Real pttr = Vec2d.createReal(width,height);
-		gr.writeToVector( pttr , phase );
-		img.addImage( pttr, String.format("a: %d, pha: %d", ang, pha*360/nrPhases));
+		for ( Grating gri : gr ) {
+		    gri.writeToVector( pttr , phase );
+		    img.addImage( pttr, String.format("wl: %4.0f a: %d, pha: %d", gri.wavelength, ang, pha*360/nrPhases));
+		}
 	    }
 	    ang++;
 	}
