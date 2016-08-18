@@ -612,7 +612,9 @@ public class Grating_Search implements ij.plugin.PlugIn {
 
 	gd.addMessage("Wavelength to analyse");
 	gd.addNumericField("main wavelength  : ", 488, 0);
+	gd.addCheckbox("use additional wavelength 1", true);
 	gd.addNumericField(" add wavelength 1: ", 568, 0);
+	gd.addCheckbox("use additional wavelength 2", true);
 	gd.addNumericField( "add wavelength 2: ", 647, 0);
 
 	gd.addMessage("Pattern parameters");
@@ -638,10 +640,34 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	final double resImpAvr	    = gd.getNextNumber();
 	final double resImpRange    = gd.getNextNumber();
 
-	final double  [] wavelength	= new double[3];
+	final double  [] wavelength_gui	= new double[3];
+	final boolean [] wavelength_gui_switch = new boolean[3];
 
-	for (int i=0; i<3; i++) {
-	    wavelength[i]   = gd.getNextNumber();
+	// TODO: there must be a nicer way to code this
+	final double [] wavelength;
+	{
+	    // copy all wavelength and switches
+	    int count_active = 1;
+	    for (int i=0; i<3; i++) {
+		wavelength_gui[i]   = gd.getNextNumber();
+		if (i!=0) {
+		    wavelength_gui_switch[i] = gd.getNextBoolean();
+		    if ( wavelength_gui_switch[i] == true ) {
+			count_active++;
+		    }
+		}
+	    }
+	    
+	    // create the final array 
+	    wavelength = new double[count_active];
+	
+	    wavelength[0]  = wavelength_gui[0];
+	    int count_pos = 1;
+	    for (int i=1; i < 3; i++) {
+		if ( wavelength_gui_switch[i] == true ) {
+		    wavelength[count_pos++] = wavelength_gui[i];
+		}
+	    }
 	}
 	
 	final int nrPhases  = (int)gd.getNextNumber();
@@ -678,7 +704,7 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	double [] gratMax = new double[3];
 	
 
-	for (int ch=0; ch<3; ch++) {
+	for (int ch=0; ch<wavelength.length; ch++) {
 	    gratMax[ch] = 2 * wavelength[ch] / ( 2 * objNA * (resImpMin-1) * pxlSize );
 	    gratMin[ch] = 2 * wavelength[ch] / ( 2 * objNA * (resImpMax-1) * pxlSize );
 
