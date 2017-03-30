@@ -2,8 +2,7 @@
 .PHONY: all clean
 
 # Options for the java compiler
-JFLAGS = -g -Xlint:unchecked -extdirs "./external" -d ./
-JFLAGS+= -target 1.6 -source 1.6
+JFLAGS = -g -Xlint:unchecked -extdirs "./external"
 JC = javac6
 JAR = jar
 
@@ -22,10 +21,15 @@ all:	$(wildcard de/bio_photonics/*/*.java)
 
 
 # create a jar-file
-jar: all
-	$(JAR) -cvfm SLM_GratingSearch_$(shell date +%Y%m%d-%H%M).jar \
+jar:	all git-version
+	$(JAR) -cvfm SLM_GratingSearch_$(shell head -c 10 git-version.txt).jar \
 	Manifest.txt plugins.config de/*/*/*.class
 
+git-version :
+	git rev-parse HEAD > ./git-version.txt  ; \
+	git tag --contains >> ./git-version.txt ; \
+	echo "n/a" >> ./git-version.txt
+	 	
 
 clean :
 	$(RM) ./de/*/*/*.class SLM_GratingSearch_*.jar
