@@ -22,9 +22,12 @@ import java.util.ArrayList;
 
 import ij.IJ;
 import ij.gui.GenericDialog;
+import ij.ImagePlus;
+
 
 import org.fairsim.linalg.Vec2d;
 import org.fairsim.fiji.DisplayWrapper;
+import org.fairsim.fiji.ImageVector;
 
 public class Generate_Grating implements ij.plugin.PlugIn {
 
@@ -89,10 +92,12 @@ public class Generate_Grating implements ij.plugin.PlugIn {
 	    for (int pha =0; pha<nrPhases; pha++) {
 		double phase = pha*Math.PI*2/nrPhases;
 
-		Vec2d.Real pttr = Vec2d.createReal(width,height);
+		ImageVector pttr = ImageVector.create(width,height);
 		for ( Grating gri : gr ) {
 		    gri.writeToVector( pttr , phase );
 		    img.addImage( pttr, String.format("wl: %4.0f a: %d, pha: %d", gri.wavelength, ang, pha*360/nrPhases));
+		    ImagePlus tmpIP = new ImagePlus("test", pttr.img());
+		    IJ.save(tmpIP, String.format("a_w%d_ang%d_pha%d.bmp", gri.wavelength, ang, pha*360/nrPhases));
 		}
 	    }
 	    ang++;
