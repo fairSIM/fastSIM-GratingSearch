@@ -22,9 +22,12 @@ import java.util.ArrayList;
 
 import ij.IJ;
 import ij.gui.GenericDialog;
+import ij.ImagePlus;
+
 
 import org.fairsim.linalg.Vec2d;
 import org.fairsim.fiji.DisplayWrapper;
+import org.fairsim.fiji.ImageVector;
 
 public class Generate_Grating implements ij.plugin.PlugIn {
 
@@ -66,16 +69,16 @@ public class Generate_Grating implements ij.plugin.PlugIn {
 	gd.addNumericField(String.format("Pattern nr [1 - %d]",gratList.size()),1,0);
 	gd.addNumericField("SLM width",1280,0);
 	gd.addNumericField("SIM height",1024,0);
-
+	gd.addStringField("save to (path+prefix)","/home/user/SLM-patterns/1.75", 30);
 	gd.showDialog();
 	if (gd.wasCanceled())
 	    return;
     
 	// get and check parameters
 	int nr = (int)gd.getNextNumber()-1;
-	int width = (int)gd.getNextNumber();
-	int height= (int)gd.getNextNumber();
-
+	int width   = (int)gd.getNextNumber();
+	int height  = (int)gd.getNextNumber();
+	String path = gd.getNextString();
 	if (nr<0 || nr>=gratList.size() || width<0 || height <0) {
 	    IJ.log("Parameters out of range");
 	    return;
@@ -89,10 +92,12 @@ public class Generate_Grating implements ij.plugin.PlugIn {
 	    for (int pha =0; pha<nrPhases; pha++) {
 		double phase = pha*Math.PI*2/nrPhases;
 
-		Vec2d.Real pttr = Vec2d.createReal(width,height);
+		ImageVector pttr = ImageVector.create(width,height);
 		for ( Grating gri : gr ) {
 		    gri.writeToVector( pttr , phase );
 		    img.addImage( pttr, String.format("wl: %4.0f a: %d, pha: %d", gri.wavelength, ang, pha*360/nrPhases));
+		    ImagePlus tmpIP = new ImagePlus("test", pttr.img());
+		    IJ.save(tmpIP, String.format("%swl%3.0f_ang%d_pha%d.bmp", path, gri.wavelength, ang, pha*360/nrPhases));
 		}
 	    }
 	    ang++;
