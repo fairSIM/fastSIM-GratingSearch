@@ -533,7 +533,7 @@ public class Grating_Search implements ij.plugin.PlugIn {
 		for (int ch=0; ch<wavelength.length; ch++)
 		    fourierCheck( fullSet[ch], gaussProfile, max_unwanted, mask_size, 
 			true, imgSpatial, imgFourier, String.format(
-			    "i: %2d wl:%3.0f", resultList.size(), wavelength[ch] )); 
+			    "set: %2d wl:%3.0f", resultList.size(), wavelength[ch] )); 
 
 
 		// resort (wavelength last, for output)
@@ -604,6 +604,7 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	gd.addMessage("System parameters");
 	String[] items = {"SXGA-3DM", "DLP6500FYE", "other"};
 	gd.addRadioButtonGroup("SLM", items, 3, 1, "SXGA-3DM");
+	gd.addStringField("    other","SLM", 30);
 	gd.addNumericField("    other: pixel size", 13.62, 2, 6, "µm");
 	gd.addNumericField("    other: pixels X  ", 1280, 0);
 	gd.addNumericField("    other: pixels Y  ", 1024, 0);
@@ -621,9 +622,9 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	gd.addNumericField( "add wavelength 2", 647, 0, 6, "nm");
 
 	gd.addMessage("Pattern parameters");
-	gd.addNumericField("#phases", 3, 0);
 	gd.addNumericField("#pattern_directions", 3, 0);
 	gd.addNumericField("max_deviation_ideal_angle", 1.5, 1,6, "deg");
+	gd.addNumericField("#phases", 3, 0);
 	gd.addNumericField("max_eucl_dist(approx. pxl)", .05, 2);
 	gd.addMessage("Modulation");
 	gd.addNumericField("max_unwanted_modulation",0.015,3);
@@ -637,10 +638,13 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	    return;
 
 	// ---- get parameters ----
-	final double pxlSize, slmPxlSize, slmPxlX, slmPxlY, slmScale;
-	final String slmType = gd.getNextRadioButton();
+	final double pxlSize, slmPxlSize, slmScale;
+	final int slmPxlX, slmPxlY;
+	final String slmType = gd.getNextRadioButton(), prefixSlm;
 	
 	if (slmType.equals("SXGA-3DM")) {
+		prefixSlm = "SXGA3DM";
+		gd.getNextString();
 		slmPxlSize	    = 13.62;
 		gd.getNextNumber();
 		slmPxlX			= 1280;
@@ -651,6 +655,8 @@ public class Grating_Search implements ij.plugin.PlugIn {
 		pxlSize			= 1000.*slmPxlSize/slmScale;
 	}
 	else if (slmType.equals("DLP6500FYE")) {
+		prefixSlm = "DLP6500";
+		gd.getNextString();
 		slmPxlSize	    = 7.56;
 		gd.getNextNumber();
 		slmPxlX			= 1920;
@@ -658,14 +664,15 @@ public class Grating_Search implements ij.plugin.PlugIn {
 		slmPxlY			= 1080;
 		gd.getNextNumber();
 		slmScale	    = gd.getNextNumber();
-		pxlSize			= slmPxlSize/slmScale;
+		pxlSize			= 1000.*slmPxlSize/slmScale;
 	}
 	else {
+		prefixSlm = gd.getNextString();
 		slmPxlSize	    = gd.getNextNumber();
 		slmPxlX			= (int)gd.getNextNumber();
 		slmPxlY			= (int)gd.getNextNumber();
 		slmScale	    = gd.getNextNumber();
-		pxlSize	    = slmPxlSize/slmScale;
+		pxlSize	    = 1000.*slmPxlSize/slmScale;
 	}
 
 	final double objNA		    = gd.getNextNumber();
@@ -702,15 +709,16 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	    }
 	}
 	
-	final int nrPhases  = (int)gd.getNextNumber();
 	final int nrDirs    = (int)gd.getNextNumber();
 	final double maxAngleDev = gd.getNextNumber();
+	final int nrPhases  = (int)gd.getNextNumber();
 	final double maxEuclDist = gd.getNextNumber();
 	
 	final double maxUnwMod   = gd.getNextNumber();
 	final int maskSize  = (int)gd.getNextNumber();
 	final boolean outputFailed=gd.getNextBoolean();
 	final int maxCandidates  = (int)gd.getNextNumber();
+	final String prefix = String.format("%s_%.2f_%.2f_%d%d", prefixSlm, objNA, resImpAvr, nrDirs, nrPhases);
 	
 	
 	// 1 - calculate the ranges for all from resolution enhancement
@@ -756,6 +764,9 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	if (res.size()>0) {
 	    ij.IJ.setProperty("de.bio_photonics.gratingsearch.phaseNumber", nrPhases);
 	    ij.IJ.setProperty("de.bio_photonics.gratingsearch.lastGratings", res);
+	    ij.IJ.setProperty("de.bio_photonics.gratingsearch.width", slmPxlX);
+	    ij.IJ.setProperty("de.bio_photonics.gratingsearch.height", slmPxlY);
+	    ij.IJ.setProperty("de.bio_photonics.gratingsearch.prefix", prefix);
 	}
 
     }
