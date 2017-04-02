@@ -226,15 +226,18 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	double maxUnwated, int maskSize, boolean outputAlsoFailed,
 	ImageDisplay spatial, ImageDisplay fourier, String name ) {
 
-	Vec2d.Cplx     sumFreq = Vec2d.createCplx( fsPxl, fsPxl );
-	Vec2d.Cplx [] gratFreq = Vec2d.createArrayCplx( candidates.length, fsPxl, fsPxl );
+	Vec2d.Real     sumFreq = Vec2d.createReal( fsPxl, fsPxl );
+	Vec2d.Real [] gratFreq = Vec2d.createArrayReal( candidates.length, fsPxl, fsPxl );
+
 
 	// Compute the gratings Fourier space and sum them up
 	for ( int i=0; i<candidates.length; i++ ) {
-	    candidates[i].writeToVector( gratFreq[i] );	// get grating as vector 
-	    gratFreq[i].times( illum );			// apply illumination vector
-	    Transforms.fft2d( gratFreq[i], false);	// transform
-	    Transforms.swapQuadrant(gratFreq[i]);	// quadrant-swap FFT result 
+	    Vec2d.Cplx tmp = Vec2d.createCplx( fsPxl, fsPxl );
+	    candidates[i].writeToVector( tmp );	// get grating as vector 
+	    tmp.times( illum );			// apply illumination vector
+	    Transforms.fft2d( tmp, false);	// transform
+	    Transforms.swapQuadrant(tmp);	// quadrant-swap FFT result 
+	    gratFreq[i].copyMagnitude( tmp );
 	    sumFreq.add( gratFreq[i] );			// add to full vector
 	}
 
@@ -281,7 +284,9 @@ public class Grating_Search implements ij.plugin.PlugIn {
 		maskRings[i*4+3] = 
 		    new ImageDisplay.Marker(fsPxl/2-mPos[0],fsPxl/2-mPos[1], maskSize, maskSize, false);
 	    }
-	    fourier.addImage(magnitude( sumFreq ), 
+	    //fourier.addImage(magnitude( sumFreq ), 
+		//name+" "+magResult+((ok)?("ok"):("!!not OK")), maskRings);
+	    fourier.addImage( sumFreq , 
 		name+" "+magResult+((ok)?("ok"):("!!not OK")), maskRings);
 	}
 
@@ -312,6 +317,18 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	return sum;
     }
 
+    /** sum up the magnitude within a sub-region (mask) of a vector */
+    double sumRegion( Vec2d.Real vec, int xp, int yp, int size ) {
+
+	double sum=0;
+
+	for (int y = Math.max(0, yp-size); y< Math.min( vec.vectorHeight()-1, yp+size); y++)
+	for (int x = Math.max(0, xp-size); x< Math.min(  vec.vectorWidth()-1, xp+size); x++) {
+	    sum += vec.get(x,y);
+	}
+
+	return sum;
+    }
 
     /** Create a Gaussian illumination profile. */
     public Vec2d.Real createGaussIllum( double fwhm, int size) {
