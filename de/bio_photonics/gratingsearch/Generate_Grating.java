@@ -69,7 +69,7 @@ public class Generate_Grating implements ij.plugin.PlugIn {
 
 	// show dialog
 	GenericDialog gd = new GenericDialog("Pattern generation");
-	gd.addNumericField(String.format("Pattern nr [1 - %d]",gratList.size()),1,0);
+	gd.addNumericField(String.format("Set nr [0 - %d]",gratList.size()-1),1,0);
 // 	gd.addNumericField("SLM width",1280,0);
 // 	gd.addNumericField("SIM height",1024,0);
 // 	gd.addStringField("file prefix","automatic", 30);
@@ -78,7 +78,7 @@ public class Generate_Grating implements ij.plugin.PlugIn {
 	    return;
     
 	// get and check parameters
-	int nr = (int)gd.getNextNumber()-1;
+	int nr = (int)gd.getNextNumber();
 // 	int width   = (int)gd.getNextNumber();
 // 	int height  = (int)gd.getNextNumber();
 	String prefix = (String)IJ.getProperty("de.bio_photonics.gratingsearch.prefix");
