@@ -264,6 +264,10 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	    //unwanted[i]/wanted[i]));
 	    if ((unwanted[i]/wanted[i])>maxUnwated) ok=false;
 	    magResult+=String.format("%1d: %5.4f ",i,unwanted[i]/wanted[i]);
+
+	    // store unwanted / wanted
+	    candidates[i].unwantedMod = unwanted[i]/wanted[i];
+
 	}
 
 	// store spectrum (if display is set != null)
@@ -785,6 +789,36 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	    ij.IJ.setProperty("de.bio_photonics.gratingsearch.height", slmPxlY);
 	    ij.IJ.setProperty("de.bio_photonics.gratingsearch.prefix", prefix);
 	}
+
+	// find the lowest modulation
+	double minTransmission = Double.MAX_VALUE;
+	int minPos = 0;
+
+	for ( int i=0; i< res.size(); i++) {
+	    
+	    // get the highest unwanted modulation from the current grating set
+	    double maxHere = Double.MIN_VALUE;
+	    Grating [][] grs = res.get(i);
+	    for ( Grating [] gr : grs ) {
+		for ( Grating g : gr ) {
+		    if ( g.unwantedMod > maxHere )
+			maxHere = g.unwantedMod;
+		}
+	    }
+
+	    // see if this is the minimum in the list
+	    if ( maxHere < minTransmission ) {
+		minTransmission = maxHere;
+		minPos = i ;
+	    }
+
+	    IJ.log("Pattern set "+i+" highest unwanted modulation: "+maxHere);
+
+	}
+
+	// output position of lowest unwanted modulation 
+	IJ.log("Lowest unwanted modulation at pos "+minPos);
+
 
     }
     

@@ -38,7 +38,8 @@ class Grating {
     final double gratPer;	// grating period, in pxl
     int shiftDir = -1;		// 0-horizontal, 1-vertical, -1 undef.
     final double wavelength;	// the exitation wavelength for this grating
-    
+    double unwantedMod = Double.MAX_VALUE;  // the unwanted modulation strength for this grating
+
     final double posX, posY;
 
     /** create and calculate grating from pxl sizes */
