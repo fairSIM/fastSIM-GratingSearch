@@ -3,8 +3,8 @@
 
 # Options for the java compiler
 JFLAGS = -g -Xlint:unchecked -extdirs "./external" -d ./
-JFLAGS+= -target 1.6 -source 1.6
-JC = javac6
+JFLAGS+= -target 1.6 -source 1.6 -bootclasspath ./external/rt-1.6.jar
+JC = javac
 JAR = jar
 
 # remove command to clean up

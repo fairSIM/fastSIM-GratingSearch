@@ -617,6 +617,10 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	    public void writeShortMessage(String w) {
 	        ij.IJ.showStatus(w);
 	    }
+	    @Override
+	    public void writeError( String w, boolean err) {
+		ij.IJ.log("ERR: "+err);
+	    }
 
 	});
 
