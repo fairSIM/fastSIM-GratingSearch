@@ -203,9 +203,10 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	    // check if a complete set was found
 	    boolean complete = true;
 	    for ( Grating e : col )
-		if ( e == null ) continue;
+		if ( e == null ) complete=false;
   
-	    ret.add( col );
+	    if (complete==true)
+		ret.add( col );
 	}
 	return ret;
     }
@@ -401,7 +402,7 @@ public class Grating_Search implements ij.plugin.PlugIn {
      *  @param max_unwanted Maximal contribution of unwanted orders
      *  @param output_failed If to output also failed pattern
      *  @param max_candidates How many candidates to calculate in first step
-     *  @return List of matching gratings
+     *  @return List of matching gratings (which may be empty or null)
      *  */
     public List<Grating [][]> calculate(
 	double [] wavelength,
@@ -429,6 +430,12 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	Tool.trace("-- Compute direction combinations (main wavelength) --");
 	List<Grating []> dirs = selectDirs(all.get(0), nr_dir, max_angle);
 	Tool.trace("   grating pairs for main wavelength: "+dirs.size());
+
+	if (dirs.size()==0) {
+	    Tool.trace("Not found any gratings fulfilling the angle criterium");
+	    return null;
+	}
+
 
 	// run these pairs through fouier checking ...
 	Tool.trace("-- Main wavelength: compute wanted vs. unwanted orders --");
@@ -735,7 +742,7 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	}
 	
 	final int nrDirs    = (int)gd.getNextNumber();
-	final double maxAngleDev = gd.getNextNumber();
+	final double maxAngleDev = gd.getNextNumber()/180.*Math.PI; // convert to rad
 	final int nrPhases  = (int)gd.getNextNumber();
 	final double maxEuclDist = gd.getNextNumber();
 	
