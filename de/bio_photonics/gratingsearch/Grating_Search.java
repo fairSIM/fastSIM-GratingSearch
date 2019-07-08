@@ -69,6 +69,8 @@ public class Grating_Search implements ij.plugin.PlugIn {
     public List<Grating> calcGrat(
 	final double gratPerMin, 
 	final double gratPerMax,
+        final double deflectionPhi,
+        final double deflectionTheta,
 	final int phaseSteps, 
 	final double wavelength ) {
 
@@ -92,8 +94,9 @@ public class Grating_Search implements ij.plugin.PlugIn {
 		    Grating current = new Grating(ax,ay,bx,by, wavelength);
 	   
 		    // check if the grating period is within bounds
-		    if ( current.gratPer < gratPerMin || 
-			 current.gratPer > gratPerMax )
+                    double angleFactor = calcAngleFactor(current.gratDir, deflectionPhi, deflectionTheta);
+		    if ( current.gratPer < gratPerMin * angleFactor || 
+			 current.gratPer > gratPerMax * angleFactor)
 			continue;
 
 		    // check if n equid. pha. can be shifted horizontal
@@ -113,6 +116,42 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	}
 
 	return candidates;
+    }
+    
+    /**
+     * calculates the angle dependent factor for the deflected beam:
+     * calculation is geometry based, the SLM is in the xy plane,
+     * big letters are 3D-Vectors, small letters are scalars:
+     * 
+     * G = g * {cos(alpha), sin(alpha),0} := grating vector in polar coordinates
+     * [G| = g
+     * V := normal vector of the emergent plane in spherical coordinates
+     * V = {sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta)}
+     * |V| = 1
+     * a := scale factor of V
+     * X := projection of G in the emergent plane
+     * Definition of the emergent plane:  XV = 0
+     * Relation between X,G and V: X = G - aV
+     * X = G - aV     |*V
+     * XV = GV - aV^2
+     * XV = GV - a
+     * 0 = GV - a
+     * a = GV
+     * insert a = GV in X = G - aV
+     * X = G - GV * V
+     * insert definitions for G and V will lead to:
+     * |x| = x = g * angleFactor
+     * angleFactor = sqrt(1 - (cos(alpha)*sin(theta)*cos(phi) + sin(alpha)*sin(theta)*sin(phi))^2)
+     * 
+     * @param alpha angle of the grating in the xy plane
+     * @param phi phi of the emergent plane
+     * @param theta theta of the emergent plane
+     * @return angleFactor
+     */
+    private static double calcAngleFactor(double alpha, double phi, double theta) {
+        double sq = Math.cos(alpha)*Math.sin(theta)*Math.cos(phi) +
+                Math.sin(alpha)*Math.sin(theta)*Math.sin(phi);
+        return Math.sqrt(1-sq*sq);
     }
 
     /** Add a grating only if no grating with similar direction
@@ -407,6 +446,7 @@ public class Grating_Search implements ij.plugin.PlugIn {
     public List<Grating [][]> calculate(
 	double [] wavelength,
 	double [] gratMin, double [] gratMax,
+        final double deflectionPhi,final double deflectionTheta,
 	int phases, int nr_dir, double max_angle, int mask_size, 
 	double max_unwanted, double max_euclDist, 
 	boolean output_failed, final int max_candidates) {
@@ -420,7 +460,7 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	// for each wavelength, create a list of candidates
 	List< List<Grating> > all = new ArrayList< List<Grating> >();
 	for (int ch=0; ch<wavelength.length; ch++) {
-	    List< Grating > candidate = calcGrat( gratMin[ch], gratMax[ch], phases, wavelength[ch] );
+	    List< Grating> candidate = calcGrat(gratMin[ch], gratMax[ch], deflectionPhi, deflectionTheta, phases, wavelength[ch]);
 	    all.add( candidate );
 	    Tool.trace(String.format(" %5.0f nm : %d candidates", wavelength[ch], candidate.size()));
 	}
@@ -645,6 +685,8 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	gd.addNumericField("objectives NA        ", 1.45, 2);
 	gd.addNumericField("resolution enhancement average  ", 1.75, 2);
 	gd.addNumericField("resolution enhancement range +- ", 0.03, 2);
+        gd.addNumericField("spherical angle of deflection (phi in degree) ", 0.0, 1);
+        gd.addNumericField("spherical angle of deflection (theta in degree) ", 0.0, 1);
 
 	gd.addMessage("Wavelength to analyse");
 	gd.addNumericField("main wavelength", 488, 0, 6, "nm");
@@ -710,6 +752,8 @@ public class Grating_Search implements ij.plugin.PlugIn {
 	final double objNA		    = gd.getNextNumber();
 	final double resImpAvr	    = gd.getNextNumber();
 	final double resImpRange    = gd.getNextNumber();
+        final double deflectionPhi = gd.getNextNumber() * Math.PI/180;
+        final double deflectionTheta = gd.getNextNumber() * Math.PI/180;
 
 	final double  [] wavelength_gui	= new double[3];
 	final boolean [] wavelength_gui_switch = new boolean[3];
@@ -787,10 +831,10 @@ public class Grating_Search implements ij.plugin.PlugIn {
 
 
 	// run the actual calculation
-	List<Grating [][]> res = calculate( wavelength, 
-	    gratMin, gratMax, nrPhases, 
-	    nrDirs, maxAngleDev, maskSize,
-	    maxUnwMod, maxEuclDist, outputFailed, maxCandidates);
+	List<Grating[][]> res = calculate(wavelength,
+                gratMin, gratMax, deflectionPhi, deflectionTheta,nrPhases,
+                nrDirs, maxAngleDev, maskSize,
+                maxUnwMod, maxEuclDist, outputFailed, maxCandidates);
 
 	// store the result, if any
 	if (res.size()>0) {
